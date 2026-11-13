@@ -1,12 +1,7 @@
-/* Optioneel: laat LoopCoach ook zonder bereik openen nadat je de pagina één keer via https hebt geladen. */
-const C = 'loopcoach-v1';
+/* Opruim-versie: verwijdert de oude offline-cache en zichzelf, en laadt open pagina's opnieuw. */
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(caches.open(C).then(async c => {
-    const hit = await c.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => null);
-    return hit || (await net) || Response.error();
-  }));
-});
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch (err) {}
+  try { await self.registration.unregister(); } catch (err) {}
+  try { for (const c of await self.clients.matchAll({ type: 'window' })) c.navigate(c.url); } catch (err) {}
+})()));
