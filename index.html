@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="LoopCoach">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>LoopCoach</title>
+<style>
+:root{
+  --bg:#000; --card:#0f1318; --line:#222a33; --fg:#f2f4f7; --mute:#97a2b0;
+  --ok:#4ade80; --bad:#ff6b6b; --accent:#38bdf8; --warn:#fbbf24;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#000;color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%;touch-action:manipulation;overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;touch-action:manipulation}
+.screen{display:none;min-height:100vh;min-height:100dvh;
+  padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.screen.active{display:flex;flex-direction:column}
+h1{font-size:28px;margin:6px 0 2px;letter-spacing:-.5px}
+.sub{color:var(--mute);font-size:15px;margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:0 0 10px;font-weight:600}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.chip{min-height:52px;border-radius:14px;border:1.5px solid var(--line);background:#161b22;font-size:16px;font-weight:600;padding:6px}
+.chip.on{border-color:var(--accent);background:#0c2a3a;color:#fff}
+.stepper{display:grid;grid-template-columns:64px 1fr 64px;gap:8px;align-items:center}
+.sb{height:60px;border-radius:14px;border:1.5px solid var(--line);background:#161b22;font-size:30px;font-weight:600;line-height:1}
+.sb:active{background:#223040}
+.stepper input{height:60px;width:100%;min-width:0;text-align:center;font-size:30px;font-weight:700;background:transparent;color:var(--fg);border:none;border-bottom:2px solid var(--line);border-radius:0;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+.stepper input:focus{outline:none;border-bottom-color:var(--accent)}
+.unit{color:var(--mute);font-size:14px;text-align:center;margin-top:6px}
+.plan{font-size:16px;color:var(--fg);margin:2px 0 12px;padding:0 4px;line-height:1.4}
+.plan b{color:var(--accent)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.row label{font-size:16px}
+.seg{display:flex;gap:8px;margin-top:10px}
+.seg .chip{flex:1;min-height:46px;font-size:15px}
+.mini{min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:#161b22;font-size:15px;font-weight:600;flex:1;padding:6px}
+input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
+.switch{position:relative;width:56px;height:34px;flex:none}
+.switch input{opacity:0;position:absolute;inset:0;width:100%;height:100%;margin:0;z-index:2}
+.switch i{position:absolute;inset:0;background:#2a313b;border-radius:17px;transition:.15s}
+.switch i:after{content:"";position:absolute;left:3px;top:3px;width:28px;height:28px;border-radius:50%;background:#fff;transition:.15s}
+.switch input:checked+i{background:var(--ok)}
+.switch input:checked+i:after{transform:translateX(22px)}
+.notice{border:1px solid #5a4a14;background:#221c08;color:#f5dd8a;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin-bottom:12px}
+.notice.bad{border-color:#7a2323;background:#2a0d0d;color:#ffb4b4}
+.notice b{color:#fff}
+.btn{display:block;width:100%;min-height:68px;border-radius:20px;border:none;font-size:22px;font-weight:700;margin-top:8px}
+.btn.primary{background:var(--ok);color:#03210d}
+.btn.sec{background:#1a2029;color:var(--fg);border:1.5px solid var(--line);font-size:18px;min-height:58px}
+.btn.danger{background:#3a1212;color:#ffb4b4;border:1.5px solid #6b2222}
+.btn.small{min-height:52px;font-size:16px}
+.simrow{display:flex;gap:8px;align-items:stretch}
+.simrow select{flex:none;width:96px;font-size:16px;border-radius:14px;background:#161b22;color:var(--fg);border:1.5px solid var(--line);padding:0 8px}
+.foot{color:#5d6773;font-size:12px;text-align:center;margin-top:14px;line-height:1.5}
+
+/* run */
+#run{transition:background .25s;background:#0b0f14}
+#run.ok{background:#052d12}
+#run.low{background:#3a0a0a}
+#run.pause{background:#1d1d22}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:36px}
+.pill{font-size:14px;font-weight:600;padding:6px 12px;border-radius:999px;background:#ffffff18}
+.pill.good{color:var(--ok)} .pill.mid{color:var(--warn)} .pill.weak{color:var(--bad)}
+.pill.sim{background:var(--warn);color:#000}
+.speedbox{text-align:center;padding:6px 0 4px}
+.speed{font-size:clamp(88px,30vw,170px);font-weight:800;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+#run.ok .speed{color:var(--ok)} #run.low .speed{color:var(--bad)}
+.speedunit{font-size:20px;color:var(--mute);margin-top:10px}
+.state{font-size:26px;font-weight:800;margin-top:6px;letter-spacing:.02em}
+#run.ok .state{color:var(--ok)} #run.low .state{color:var(--bad)}
+.tgt{font-size:16px;color:var(--mute);margin-top:4px;min-height:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 8px}
+.stat{background:#ffffff0f;border-radius:16px;padding:10px 12px;min-height:78px}
+.stat .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.stat .v{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.1}
+.stat .s{font-size:13px;color:var(--mute);margin-top:2px;min-height:16px}
+.v.ok{color:var(--ok)} .v.bad{color:var(--bad)}
+.bar{height:12px;border-radius:6px;background:#ffffff18;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.beepline{text-align:center;color:var(--mute);font-size:14px;margin:2px 0 6px}
+.msg{font-size:14px;color:#ffd7d7;background:#3a1212;border-radius:12px;padding:10px;margin:6px 0;display:none;line-height:1.4}
+.msg.on{display:block}
+.spacer{flex:1}
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.ctl .btn{margin-top:0}
+.overlay{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:20;padding:24px}
+.overlay.on{display:flex}
+.dialog{background:#141a21;border:1px solid var(--line);border-radius:22px;padding:20px;width:100%;max-width:420px}
+.dialog h3{margin:0 0 6px;font-size:22px}
+.dialog p{margin:0 0 12px;color:var(--mute);font-size:16px}
+#count{background:#000e}
+#countNum{font-size:min(60vw,320px);font-weight:800;color:var(--ok)}
+
+/* summary */
+.tot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.tot .stat{background:var(--card);border:1px solid var(--line)}
+.splits .r{position:relative;display:grid;grid-template-columns:62px 1fr auto;gap:8px;align-items:center;padding:10px 10px;border-radius:12px;margin-bottom:6px;background:#161b22;overflow:hidden;min-height:54px}
+.splits .r .fill{position:absolute;left:0;top:0;bottom:0;opacity:.28;z-index:0}
+.splits .r>*:not(.fill){position:relative;z-index:1}
+.splits .km{font-weight:700;font-size:16px}
+.splits .t{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.splits .t small{display:block;font-size:12px;color:var(--mute);font-weight:500}
+.splits .sp{text-align:right;font-size:16px;font-variant-numeric:tabular-nums}
+.splits .sp small{display:block;font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+
+<!-- ============ INSTELLINGEN ============ -->
+<section id="setup" class="screen active">
+  <h1>LoopCoach</h1>
+  <p class="sub">Houdt je snelheid bij en piept of je op schema zit.</p>
+
+  <div id="resumeBox" class="notice" style="display:none">
+    <b>Onderbroken run gevonden</b><br><span id="resumeTxt"></span>
+    <div class="seg">
+      <button class="chip on" id="btnResume">Hervatten</button>
+      <button class="chip" id="btnDiscard">Weggooien</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Afstand</h2>
+    <div class="chips" id="presets"></div>
+    <div style="height:10px"></div>
+    <div class="stepper" data-key="dist" data-step="0.1" data-min="0.1" data-max="200" data-dec="3">
+      <button class="sb" data-d="-1" aria-label="Kortere afstand">−</button>
+      <input inputmode="decimal" aria-label="Afstand in kilometer">
+      <button class="sb" data-d="1" aria-label="Langere afstand">+</button>
+    </div>
+    <div class="unit">kilometer</div>
+  </div>
+
+  <div class="card">
+    <h2>Gewenste snelheid</h2>
+    <div class="stepper" data-key="speed" data-step="0.1" data-min="1" data-max="40" data-dec="1">
+      <button class="sb" data-d="-1" aria-label="Langzamer">−</button>
+      <input inputmode="decimal" aria-label="Snelheid in km/u">
+      <button class="sb" data-d="1" aria-label="Sneller">+</button>
+    </div>
+    <div class="unit">km/u</div>
+  </div>
+
+  <div class="plan" id="plan"></div>
+
+  <div class="card">
+    <h2>Controle-interval (z)</h2>
+    <div class="stepper" data-key="z" data-step="0.5" data-min="0.25" data-max="30" data-dec="2">
+      <button class="sb" data-d="-1" aria-label="Korter interval">−</button>
+      <input inputmode="decimal" aria-label="Interval in minuten">
+      <button class="sb" data-d="1" aria-label="Langer interval">+</button>
+    </div>
+    <div class="unit">minuten tussen de piepjes</div>
+    <div class="row"><span style="font-size:15px;color:var(--mute)">Snelheid uitmiddelen over</span></div>
+    <div class="seg" id="winSeg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Geluid</h2>
+    <div class="row" style="margin-top:0"><label for="vol">Volume</label></div>
+    <input type="range" id="vol" min="0.1" max="1" step="0.05">
+    <div class="row">
+      <label for="melodyOn">Muziekje bij het halen van de afstand</label>
+      <span class="switch"><input type="checkbox" id="melodyOn"><i></i></span>
+    </div>
+    <div class="seg" id="melSeg"></div>
+    <div class="seg">
+      <button class="mini" id="tLow">▼ Lage toon</button>
+      <button class="mini" id="tHigh">▲ Hoge toon</button>
+    </div>
+  </div>
+
+  <div class="notice" id="locNotice">
+    <b>Locatie:</b> Safari heeft locatietoegang nodig, bij voorkeur <b>Tijdens gebruik</b> (of Altijd) en met <b>Precieze locatie</b> aan.
+    Instellingen › Privacy en beveiliging › Locatievoorzieningen › Safari-websites. Tik straks op <b>Sta toe</b> als iOS het vraagt.
+    Houd Safari tijdens het lopen open in de voorgrond: bij vergrendelen of wisselen van app stopt de meting.
+  </div>
+
+  <button class="btn primary" id="btnToReady">Naar de start</button>
+  <div class="simrow" style="margin-top:8px">
+    <button class="btn sec small" id="btnSim" style="margin-top:0">Test zonder te lopen (simulatie)</button>
+    <select id="simScale" aria-label="Simulatiesnelheid"><option value="1">1×</option><option value="10" selected>10×</option><option value="30">30×</option></select>
+  </div>
+  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking, geen externe verbindingen.</div>
+</section>
+
+<!-- ============ RUN ============ -->
+<section id="run" class="screen wait">
+  <div class="top">
+    <span class="pill" id="gps">GPS zoeken…</span>
+    <span class="pill" id="runInfo"></span>
+  </div>
+  <div class="speedbox">
+    <div class="speed" id="speed">–,–</div>
+    <div class="speedunit">km/u · <span id="pace">–:–</span> min/km</div>
+    <div class="state" id="state">Wachten op GPS…</div>
+    <div class="tgt" id="tgt"></div>
+  </div>
+  <div class="msg" id="gpsMsg"></div>
+  <div class="grid">
+    <div class="stat"><div class="k">Afgelegd</div><div class="v" id="sDist">0,00</div><div class="s">km</div></div>
+    <div class="stat"><div class="k">Resterend</div><div class="v" id="sRem">0,00</div><div class="s">km</div></div>
+    <div class="stat"><div class="k">Tijd</div><div class="v" id="sTime">0:00</div><div class="s" id="sTimeS">&nbsp;</div></div>
+    <div class="stat"><div class="k">Gemiddeld</div><div class="v" id="sAvg">–,–</div><div class="s">km/u</div></div>
+    <div class="stat"><div class="k">Verwachte eindtijd</div><div class="v" id="sEta">–:–</div><div class="s" id="sEtaS">&nbsp;</div></div>
+    <div class="stat"><div class="k">Schema</div><div class="v" id="sSched">–</div><div class="s" id="sSchedS">&nbsp;</div></div>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="beepline" id="beepLine">&nbsp;</div>
+  <div class="spacer"></div>
+  <div class="ctl" id="ctlReady">
+    <button class="btn sec" id="btnBack">Terug</button>
+    <button class="btn primary" id="btnStart">START</button>
+  </div>
+  <div class="ctl" id="ctlRun" style="display:none">
+    <button class="btn sec" id="btnPause">Pauze</button>
+    <button class="btn danger" id="btnStop">Stop</button>
+  </div>
+</section>
+
+<!-- ============ SAMENVATTING ============ -->
+<section id="summary" class="screen">
+  <h1 id="sumTitle">Klaar</h1>
+  <p class="sub" id="sumSub"></p>
+  <div class="tot" id="sumTot"></div>
+  <div class="card splits"><h2>Kilometertijden</h2><div id="sumRows"></div></div>
+  <button class="btn sec small" id="btnCopy">Kopieer samenvatting</button>
+  <button class="btn primary" id="btnAgain">Nieuwe run</button>
+</section>
+
+<!-- overlays -->
+<div class="overlay" id="count"><div id="countNum">3</div></div>
+<div class="overlay" id="confirm">
+  <div class="dialog">
+    <h3>Run beëindigen?</h3>
+    <p>Je krijgt de samenvatting van wat je tot nu toe hebt gelopen.</p>
+    <button class="btn danger" id="btnStopYes">Ja, stop de run</button>
+    <button class="btn sec" id="btnStopNo">Doorgaan met lopen</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- hulpfuncties ---------- */
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const fmt = (n, d = 1) => Number.isFinite(n) ? n.toFixed(d).replace('.', ',') : '–';
+const fmtTrim = (n, d = 3) => String(Number(n.toFixed(d))).replace('.', ',');
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
+}
+function fmtDelta(ms) {
+  const s = Math.round(Math.abs(ms) / 1000);
+  return `${ms >= 0 ? '+' : '−'}${Math.floor(s / 60)}:${pad(s % 60)}`;
+}
+function fmtPace(secPerKm) {
+  if (!Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm >= 3600) return '–:–';
+  const s = Math.round(secPerKm);
+  return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+}
+function loadJSON(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function delKey(k) { try { localStorage.removeItem(k); } catch (e) {} }
+function haversine(a, b) {
+  const r = 6371000, t = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * t, dLon = (b.lon - a.lon) * t;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(s));
+}
+
+/* virtuele klok: gelijk aan echte tijd, behalve in de simulatie (sneller) */
+let tScale = 1, vBase = Date.now(), rBase = performance.now();
+const now = () => vBase + (performance.now() - rBase) * tScale;
+function setScale(s) { vBase = now(); rBase = performance.now(); tScale = s; }
+
+/* ---------- instellingen ---------- */
+const KEY_SET = 'loopcoach.settings.v1', KEY_RUN = 'loopcoach.run.v1';
+const PRESETS = [
+  { id: '1', label: '1 km', km: 1 },
+  { id: '5', label: '5 km', km: 5 },
+  { id: '10', label: '10 km', km: 10 },
+  { id: '10m', label: '10 mijl', km: 16.09344 },
+  { id: 'half', label: 'Halve marathon', km: 21.0975 },
+  { id: 'full', label: 'Marathon', km: 42.195 },
+  { id: 'free', label: 'Vrij veld', km: null }
+];
+const MELODY_NAMES = ['Fanfare', 'Ode aan de vreugde', 'Huppelloopje'];
+const S = Object.assign(
+  { dist: 10, preset: '10', speed: 10, z: 1, win: 15, vol: 0.8, melodyOn: true, melody: 0 },
+  loadJSON(KEY_SET) || {}
+);
+const saveSettings = () => saveJSON(KEY_SET, S);
+
+/* ---------- geluid ---------- */
+let AC = null, master = null;
+function initAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return false;
+  if (!AC) { AC = new C(); master = AC.createGain(); master.connect(AC.destination); }
+  master.gain.value = S.vol;
+  if (AC.state !== 'running') AC.resume();
+  try { // stille buffer: ontgrendelt audio op iOS binnen de tik
+    const s = AC.createBufferSource(); s.buffer = AC.createBuffer(1, 1, 22050);
+    s.connect(AC.destination); s.start(0);
+  } catch (e) {}
+  return true;
+}
+function tone(freq, at, dur, type = 'sine', vol = 0.9) {
+  if (!AC) return;
+  if (AC.state !== 'running') AC.resume();
+  const o = AC.createOscillator(), g = AC.createGain();
+  const t0 = AC.currentTime + at + 0.02;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.015);
+  g.gain.setValueAtTime(vol, t0 + Math.max(0.02, dur - 0.06));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.03);
+}
+const beepLow    = () => tone(240, 0, 0.75, 'triangle', 1);
+const beepHigh   = () => tone(1175, 0, 0.35, 'sine', 0.9);
+const beepNoGps  = () => { tone(620, 0, 0.12, 'square', 0.35); tone(620, 0.2, 0.12, 'square', 0.35); tone(620, 0.4, 0.12, 'square', 0.35); };
+const beepTick   = () => tone(760, 0, 0.12, 'sine', 0.8);
+const beepGo     = () => tone(1480, 0, 0.45, 'sine', 0.9);
+
+const NOTE = { C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88,
+  C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880, B5: 987.77,
+  C6: 1046.5, D6: 1174.66, E6: 1318.51, G6: 1567.98 };
+const MELODIES = [
+  { u: 0.17, seq: [['C5', 1], ['E5', 1], ['G5', 1], ['C6', 2], ['G5', 1], ['C6', 5]], chord: ['E6', 'G6'] },
+  { u: 0.24, seq: [['E5', 1], ['E5', 1], ['F5', 1], ['G5', 1], ['G5', 1], ['F5', 1], ['E5', 1], ['D5', 1],
+                   ['C5', 1], ['C5', 1], ['D5', 1], ['E5', 1], ['D5', 1.5], ['C5', .5], ['C5', 2.5]] },
+  { u: 0.15, seq: [['C5', 1], ['E5', 1], ['G5', 1], ['E5', 1], ['A5', 1], ['G5', 1], ['E5', 1], ['G5', 1],
+                   ['D5', 1], ['F5', 1], ['A5', 1], ['F5', 1], ['B5', 1], ['A5', 1], ['G5', 2],
+                   ['C6', 1], ['G5', 1], ['E5', 1], ['G5', 1], ['C6', 4]], chord: ['E6'] }
+];
+function playMelody(i) {
+  if (!initAudio()) return;
+  const m = MELODIES[i] || MELODIES[0];
+  let t = 0;
+  m.seq.forEach(([n, len], idx) => {
+    const d = len * m.u;
+    tone(NOTE[n], t, d * 0.92, 'triangle', 0.8);
+    tone(NOTE[n] * 2, t, d * 0.6, 'sine', 0.18);
+    if (idx === m.seq.length - 1 && m.chord) m.chord.forEach(c => tone(NOTE[c], t, d * 0.95, 'triangle', 0.4));
+    t += d;
+  });
+}
+
+/* ---------- scherm aan houden ---------- */
+let wake = null;
+async function lockScreen() {
+  try {
+    if ('wakeLock' in navigator && !wake) {
+      wake = await navigator.wakeLock.request('screen');
+      wake.addEventListener('release', () => { wake = null; });
+    }
+  } catch (e) {}
+}
+function unlockScreen() { try { if (wake) wake.release(); } catch (e) {} wake = null; }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ['ready', 'countdown', 'running', 'paused'].includes(RUN.state)) lockScreen();
+});
+
+/* ---------- run-toestand ---------- */
+const RUN = { state: 'setup' };
+const elapsed = () => RUN.acc + (RUN.resumedAt !== null ? now() - RUN.resumedAt : 0);
+const MAX_ACC = 35;      // m: fixes met slechtere nauwkeurigheid negeren
+const MAX_SPEED = 12;    // m/s: hardere sprongen zijn GPS-uitschieters
+const KF_Q = 4;          // m/s: aangenomen onzekerheid in beweging voor het positiefilter
+const STALE = 10000;     // ms zonder bruikbare fix = geen signaal
+
+function resetRun(sim) {
+  Object.assign(RUN, {
+    state: 'ready', sim, target: S.dist * 1000, speedKmh: S.speed, zMs: S.z * 60000, win: S.win * 1000,
+    dist: 0, acc: 0, resumedAt: null, last: null, kf: null, simTrue: 0, hist: [], splits: [], nextBeepAt: S.z * 60000,
+    lastFixT: null, accuracy: null, sp: null, outliers: 0, finalEl: null, completed: false,
+    gpsErr: null, watchId: null, simTimer: null, lastRestart: 0, snapTick: 0
+  });
+}
+const onTarget = sp => Math.round(sp * 10) >= Math.round(RUN.speedKmh * 10);
+
+/* ---------- GPS ---------- */
+function startGPS() {
+  if (RUN.sim) return startSim();
+  if (!('geolocation' in navigator)) { RUN.gpsErr = 'Dit toestel of deze browser biedt geen locatie. Open de pagina in Safari.'; return; }
+  stopWatch();
+  RUN.watchId = navigator.geolocation.watchPosition(
+    p => { RUN.gpsErr = null; onFix({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, speed: p.coords.speed }); },
+    err => {
+      if (err.code === 1) RUN.gpsErr = 'Locatietoegang is geweigerd. Ga naar Instellingen › Privacy en beveiliging › Locatievoorzieningen › Safari-websites en kies "Tijdens gebruik", zet Precieze locatie aan en laad de pagina opnieuw.';
+      else if (err.code === 2) RUN.gpsErr = 'Locatie is nu niet beschikbaar. Staat Locatievoorzieningen aan? Even wachten of buiten gaan staan.';
+      /* code 3 (timeout): de watch loopt door, geen melding nodig */
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+  );
+}
+function stopWatch() {
+  if (RUN.watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(RUN.watchId);
+  RUN.watchId = null;
+}
+function stopGPS() {
+  stopWatch();
+  if (RUN.simTimer) clearInterval(RUN.simTimer);
+  RUN.simTimer = null;
+  if (RUN.sim) setScale(1);
+}
+
+function onFix(f) {
+  const t = now();
+  RUN.lastFixT = t; RUN.accuracy = f.acc;
+  if (RUN.state !== 'running') return;
+  if (f.acc > MAX_ACC) return;
+  const el = elapsed();
+  if (!RUN.kf) {                         // eerste bruikbare fix = referentie
+    RUN.kf = { lat: f.lat, lon: f.lon, P: Math.max(f.acc, 3) ** 2, el };
+    RUN.last = { lat: f.lat, lon: f.lon, el };
+    RUN.hist.push({ t: el, d: RUN.dist });
+    return;
+  }
+  const kf = RUN.kf;
+  const dt = (el - kf.el) / 1000;
+  if (dt <= 0) return;
+  if (haversine(kf, f) / dt >= MAX_SPEED) {   // uitschieter: negeren; na 5 op rij opnieuw beginnen
+    if (++RUN.outliers >= 5) {
+      RUN.kf = { lat: f.lat, lon: f.lon, P: Math.max(f.acc, 3) ** 2, el };
+      RUN.last = { lat: f.lat, lon: f.lon, el }; RUN.outliers = 0;
+    }
+    return;
+  }
+  RUN.outliers = 0;
+  /* eenvoudig Kalman-filter op de positie: dempt GPS-ruis, zodat het pad niet wordt opgerekt */
+  kf.P += dt * KF_Q * KF_Q;
+  const K = kf.P / (kf.P + Math.max(f.acc, 3) ** 2);
+  kf.lat += K * (f.lat - kf.lat); kf.lon += K * (f.lon - kf.lon);
+  kf.P *= (1 - K); kf.el = el;
+
+  const seg = haversine(RUN.last, kf);
+  const stationary = f.speed != null && f.speed >= 0 && f.speed < 0.3;
+  const minStep = Math.max(1.5, f.acc * 0.3);
+  if (!stationary && seg >= minStep) {
+    const d0 = RUN.dist, t0 = RUN.last.el;
+    RUN.dist += seg;
+    recordSplits(d0, RUN.dist, t0, el);
+    RUN.last = { lat: kf.lat, lon: kf.lon, el };
+    RUN.hist.push({ t: el, d: RUN.dist });
+    if (RUN.dist >= RUN.target) {
+      const at = t0 + (RUN.target - d0) / (RUN.dist - d0) * (el - t0);
+      finishRun(true, at);
+    }
+  } else {
+    RUN.hist.push({ t: el, d: RUN.dist });
+  }
+  const cut = el - 60000;
+  while (RUN.hist.length > 2 && RUN.hist[0].t < cut) RUN.hist.shift();
+}
+function recordSplits(d0, d1, t0, t1) {
+  const lim = Math.min(d1, RUN.target);
+  for (;;) {
+    const k = RUN.splits.length + 1, dm = k * 1000;
+    if (dm > lim + 1e-6) break;
+    RUN.splits.push({ km: k, at: t0 + (dm - d0) / (d1 - d0) * (t1 - t0) });
+  }
+}
+/* gladde snelheid: afgelegd pad over een venster van 10-20 s */
+function smoothSpeed() {
+  const h = RUN.hist;
+  if (h.length < 2) return null;
+  const last = h[h.length - 1];
+  if (elapsed() - last.t > STALE) return null;
+  const cutoff = last.t - RUN.win;
+  let i = 0;
+  while (i < h.length - 1 && h[i].t < cutoff) i++;
+  const span = last.t - h[i].t;
+  if (span < 5000) return null;
+  return Math.max(0, (last.d - h[i].d) / (span / 1000) * 3.6);
+}
+
+/* ---------- simulatie ---------- */
+function startSim() {
+  setScale(RUN.simScale || 10);
+  const sim = { lat: 51.63, lon: 4.94, lastT: now(), jumped: false };
+  RUN.simTimer = setInterval(() => {
+    const t = now(), dt = (t - sim.lastT) / 1000; sim.lastT = t;
+    let v = 0;
+    if (RUN.state === 'running') {
+      const tv = elapsed() / 1000;
+      v = RUN.speedKmh / 3.6 * (1 + 0.10 * Math.sin(tv / 70)) + (Math.random() - 0.5) * 0.3;
+      sim.lat += v * dt / 111320; RUN.simTrue += v * dt;
+    }
+    let lat = sim.lat + (Math.random() - 0.5) * 5 / 111320;
+    const lon = sim.lon + (Math.random() - 0.5) * 5 / (111320 * Math.cos(sim.lat * Math.PI / 180));
+    if (RUN.state === 'running' && !sim.jumped && elapsed() > 40000) { sim.jumped = true; lat += 70 / 111320; }
+    onFix({ lat, lon, acc: 5 + Math.random() * 4, speed: Math.max(0, v + (Math.random() - 0.5) * 0.2) });
+  }, Math.max(10, 1000 / (RUN.simScale || 10)));
+}
+
+/* ---------- run-verloop ---------- */
+function startCountdown() {
+  if (RUN.state !== 'ready') return;
+  initAudio();
+  RUN.state = 'countdown';
+  let n = 3;
+  const box = $('#count');
+  box.classList.add('on');
+  const step = () => {
+    if (RUN.state !== 'countdown') { box.classList.remove('on'); return; }
+    if (n > 0) { $('#countNum').textContent = n; beepTick(); n--; setTimeout(step, 1000); }
+    else {
+      box.classList.remove('on'); beepGo();
+      RUN.state = 'running'; RUN.acc = 0; RUN.resumedAt = now();
+      RUN.last = null; RUN.kf = null; RUN.hist = []; RUN.nextBeepAt = RUN.zMs;
+      lockScreen(); render();
+    }
+  };
+  step();
+}
+function pauseResume() {
+  if (RUN.state === 'running') {
+    RUN.acc += now() - RUN.resumedAt; RUN.resumedAt = null;
+    RUN.state = 'paused'; RUN.last = null; RUN.kf = null; RUN.hist = []; saveSnap();
+  } else if (RUN.state === 'paused') {
+    RUN.resumedAt = now(); RUN.state = 'running'; RUN.last = null; RUN.kf = null; RUN.hist = [];
+    lockScreen();
+  }
+  render();
+}
+function finishRun(completed, atEl) {
+  if (!['running', 'paused'].includes(RUN.state)) return;
+  const el = elapsed();
+  const fin = completed ? Math.min(atEl, el) : el;
+  if (RUN.resumedAt !== null) { RUN.acc += now() - RUN.resumedAt; RUN.resumedAt = null; }
+  RUN.finalEl = fin; RUN.completed = completed; RUN.state = 'done';
+  if (completed) RUN.dist = RUN.target;
+  stopGPS(); unlockScreen(); delKey(KEY_RUN);
+  $('#confirm').classList.remove('on');
+  if (completed && S.melodyOn) { initAudio(); playMelody(S.melody); }
+  buildSummary(); show('summary');
+}
+
+/* herstel na onverwacht herladen van de pagina */
+function saveSnap() {
+  if (RUN.sim || !['running', 'paused'].includes(RUN.state)) return;
+  saveJSON(KEY_RUN, { dist: RUN.dist, el: elapsed(), splits: RUN.splits, nextBeepAt: RUN.nextBeepAt,
+    cfg: { target: RUN.target, speedKmh: RUN.speedKmh, zMs: RUN.zMs, win: RUN.win }, savedAt: Date.now() });
+}
+function restoreSnap(sn) {
+  resetRun(false);
+  Object.assign(RUN, sn.cfg, { dist: sn.dist, acc: sn.el, splits: sn.splits, nextBeepAt: sn.nextBeepAt, state: 'paused' });
+  initAudio(); startGPS(); lockScreen(); show('run'); render();
+}
+
+/* ---------- tick ---------- */
+function tick() {
+  if (RUN.state === 'running') {
+    RUN.sp = smoothSpeed();
+    const el = elapsed();
+    if (el >= RUN.nextBeepAt) {
+      const stale = RUN.lastFixT == null || now() - RUN.lastFixT > STALE;
+      if (RUN.sp == null || stale) beepNoGps();
+      else if (onTarget(RUN.sp)) beepHigh();
+      else beepLow();
+      while (RUN.nextBeepAt <= el) RUN.nextBeepAt += RUN.zMs;   // na achtergrond: één piep, geen inhaalrij
+    }
+    if (!RUN.sim && RUN.lastFixT != null && now() - RUN.lastFixT > 25000 && now() - RUN.lastRestart > 25000) {
+      RUN.lastRestart = now(); startGPS();
+    }
+    if (++RUN.snapTick % 16 === 0) saveSnap();
+  }
+  render();
+}
+
+/* ---------- weergave ---------- */
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  window.scrollTo(0, 0);
+}
+function setText(id, t) { const e = $(id); if (e.textContent !== t) e.textContent = t; }
+
+function render() {
+  const st = RUN.state;
+  if (!['ready', 'countdown', 'running', 'paused'].includes(st)) return;
+  const el = elapsed();
+  const sinceFix = RUN.lastFixT == null ? Infinity : now() - RUN.lastFixT;
+  let cls = 'wait', label, sp = null;
+  if (st === 'running') {
+    sp = RUN.sp;
+    if (sp == null) label = sinceFix > STALE ? 'Geen GPS-signaal' : 'Snelheid wordt bepaald…';
+    else if (onTarget(sp)) { cls = 'ok'; label = '▲ OP SNELHEID'; }
+    else { cls = 'low'; label = '▼ TE LANGZAAM'; }
+  } else if (st === 'paused') { cls = 'pause'; label = 'PAUZE'; }
+  else label = RUN.accuracy == null ? 'Wachten op GPS…' : 'GPS klaar. Druk op START';
+  $('#run').className = 'screen active ' + cls;
+
+  setText('#state', label);
+  setText('#speed', sp == null ? '–,–' : fmt(sp, 1));
+  setText('#pace', sp != null && sp > 0.5 ? fmtPace(3600 / sp) : '–:–');
+  setText('#tgt', sp != null
+    ? `doel ${fmt(RUN.speedKmh, 1)} km/u (${sp >= RUN.speedKmh ? '+' : '−'}${fmt(Math.abs(sp - RUN.speedKmh), 1)})`
+    : `doel ${fmt(RUN.speedKmh, 1)} km/u · ${fmtPace(3600 / RUN.speedKmh)} min/km`);
+
+  const g = $('#gps');
+  let gt, gc = '';
+  if (RUN.sim) { gt = 'SIMULATIE ' + (RUN.simScale || 10) + '×'; gc = 'sim'; }
+  else if (RUN.accuracy == null) gt = 'GPS zoeken…';
+  else if (sinceFix > STALE && st !== 'paused') { gt = 'GPS kwijt'; gc = 'weak'; }
+  else { gt = `GPS ±${Math.round(RUN.accuracy)} m`; gc = RUN.accuracy <= 10 ? 'good' : RUN.accuracy <= 25 ? 'mid' : 'weak'; }
+  g.className = 'pill ' + gc; setText('#gps', gt);
+  setText('#runInfo', `${fmtTrim(RUN.target / 1000, 2)} km`);
+
+  const msg = $('#gpsMsg');
+  msg.classList.toggle('on', !!RUN.gpsErr);
+  if (RUN.gpsErr) msg.textContent = RUN.gpsErr;
+
+  const dist = RUN.dist;
+  setText('#sDist', fmt(dist / 1000, 2));
+  setText('#sRem', fmt(Math.max(0, RUN.target - dist) / 1000, 2));
+  setText('#sTime', fmtTime(el));
+  setText('#sTimeS', 'schema ' + fmtTime(RUN.target / (RUN.speedKmh / 3.6) * 1000));
+  const avg = (el > 8000 && dist > 30) ? dist / (el / 1000) : null;   // m/s
+  setText('#sAvg', avg ? fmt(avg * 3.6, 1) : '–,–');
+  if (avg) {
+    const remS = Math.max(0, RUN.target - dist) / avg;
+    setText('#sEta', fmtTime(el + remS * 1000));
+    setText('#sEtaS', 'om ' + new Date(now() + remS * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }));
+  } else { setText('#sEta', '–:–'); setText('#sEtaS', ' '); }
+
+  const sv = $('#sSched');
+  if (el > 3000 && dist > 0) {
+    const sched = dist / (RUN.speedKmh / 3.6) * 1000;
+    const ahead = sched - el;
+    const m = dist - (RUN.speedKmh / 3.6) * (el / 1000);
+    setText('#sSched', Math.abs(ahead) < 1000 ? '0:00' : fmtDelta(ahead));
+    sv.className = 'v ' + (ahead >= 0 ? 'ok' : 'bad');
+    setText('#sSchedS', `${ahead >= 0 ? 'voor' : 'achter'} · ${m >= 0 ? '+' : '−'}${Math.round(Math.abs(m))} m`);
+  } else { setText('#sSched', '–'); sv.className = 'v'; setText('#sSchedS', ' '); }
+
+  $('#bar').style.width = clamp(dist / RUN.target * 100, 0, 100) + '%';
+  setText('#beepLine', st === 'running'
+    ? `Volgend piepje over ${fmtTime(Math.max(0, RUN.nextBeepAt - el))}`
+    : `Piepje elke ${fmtTrim(RUN.zMs / 60000, 2)} min · lage toon = te langzaam`);
+
+  $('#ctlReady').style.display = st === 'ready' || st === 'countdown' ? 'grid' : 'none';
+  $('#ctlRun').style.display = st === 'running' || st === 'paused' ? 'grid' : 'none';
+  setText('#btnPause', st === 'paused' ? 'Hervat' : 'Pauze');
+}
+
+/* ---------- samenvatting ---------- */
+let lastSummaryText = '';
+function buildSummary() {
+  const dist = RUN.completed ? RUN.target : RUN.dist;
+  const tot = Math.max(1, RUN.finalEl);
+  const rows = [];
+  let prevAt = 0, prevD = 0;
+  RUN.splits.forEach(s => { rows.push({ label: s.km + ' km', d: 1000, ms: s.at - prevAt, cum: s.at }); prevAt = s.at; prevD = s.km * 1000; });
+  const rest = dist - prevD;
+  if (rest > 25 && tot - prevAt > 0) rows.push({ label: '+' + fmt(rest / 1000, 2), d: rest, ms: tot - prevAt, cum: tot, partial: true });
+  rows.forEach(r => { r.kmh = r.d / r.ms * 3600; r.pace = r.ms / 1000 / (r.d / 1000); });
+  const maxKmh = Math.max(RUN.speedKmh, ...rows.map(r => r.kmh), 1);
+
+  const avgKmh = dist / (tot / 1000) * 3.6;
+  const sched = dist / (RUN.speedKmh / 3.6) * 1000;
+  const diff = sched - tot;
+  const schedTxt = Math.abs(diff) < 1000 ? 'op schema' : `${fmtDelta(diff)} (${diff >= 0 ? 'voor' : 'achter'})`;
+
+  $('#sumTitle').textContent = RUN.completed ? 'Afstand gehaald' : 'Run beëindigd';
+  $('#sumSub').textContent = `${fmtTrim(dist / 1000, 2)} km${RUN.completed ? '' : ' van ' + fmtTrim(RUN.target / 1000, 2) + ' km'} · doel ${fmt(RUN.speedKmh, 1)} km/u`;
+  const stat = (k, v, s, c) => `<div class="stat"><div class="k">${k}</div><div class="v ${c || ''}">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
+  $('#sumTot').innerHTML =
+    stat('Tijd', fmtTime(tot), 'schema ' + fmtTime(sched)) +
+    stat('Gem. snelheid', fmt(avgKmh, 1), 'km/u') +
+    stat('Gem. tempo', fmtPace(3600 / avgKmh), 'min/km') +
+    stat('Ten opzichte van schema', Math.abs(diff) < 1000 ? '0:00' : fmtDelta(diff), diff >= 0 ? 'voor op schema' : 'achter op schema', diff >= 0 ? 'ok' : 'bad');
+
+  $('#sumRows').innerHTML = rows.length ? rows.map(r => {
+    const good = Math.round(r.kmh * 10) >= Math.round(RUN.speedKmh * 10);
+    const col = good ? 'var(--ok)' : 'var(--bad)';
+    return `<div class="r"><div class="fill" style="width:${(r.kmh / maxKmh * 100).toFixed(1)}%;background:${col}"></div>` +
+      `<div class="km">${r.label}</div>` +
+      `<div class="t">${fmtTime(r.ms)}<small>totaal ${fmtTime(r.cum)}</small></div>` +
+      `<div class="sp" style="color:${col}">${fmt(r.kmh, 1)} km/u<small>${fmtPace(r.pace)} min/km</small></div></div>`;
+  }).join('') : '<div style="color:var(--mute);font-size:15px">Nog geen volle kilometer gelopen.</div>';
+
+  lastSummaryText = [
+    `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}`,
+    `Gemiddeld ${fmt(avgKmh, 1)} km/u (${fmtPace(3600 / avgKmh)} min/km), doel ${fmt(RUN.speedKmh, 1)} km/u, ${schedTxt}`,
+    ...rows.map(r => `${r.label}: ${fmtTime(r.ms)} (${fmt(r.kmh, 1)} km/u)`)
+  ].join('\n');
+}
+
+/* ---------- instellingenscherm ---------- */
+function updatePlan() {
+  const ms = S.dist / S.speed * 3600000;
+  $('#plan').innerHTML = `Streeftijd <b>${fmtTime(ms)}</b> · tempo <b>${fmtPace(3600 / S.speed)}</b> min/km`;
+}
+function buildPresets() {
+  const box = $('#presets'); box.innerHTML = '';
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.preset === p.id ? ' on' : '');
+    b.textContent = p.label; b.dataset.id = p.id;
+    b.addEventListener('click', () => {
+      S.preset = p.id;
+      if (p.km) S.dist = p.km; else $('[data-key=dist] input').focus();
+      saveSettings(); refreshSetup();
+    });
+    box.appendChild(b);
+  });
+}
+function buildSegs() {
+  const w = $('#winSeg'); w.innerHTML = '';
+  [10, 15, 20].forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.win === v ? ' on' : ''); b.textContent = v + ' s';
+    b.addEventListener('click', () => { S.win = v; saveSettings(); buildSegs(); });
+    w.appendChild(b);
+  });
+  const m = $('#melSeg'); m.innerHTML = '';
+  MELODY_NAMES.forEach((n, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.melody === i ? ' on' : ''); b.textContent = n;
+    b.style.fontSize = '14px';
+    b.addEventListener('click', () => { S.melody = i; saveSettings(); buildSegs(); initAudio(); playMelody(i); });
+    m.appendChild(b);
+  });
+}
+function refreshSetup() {
+  buildPresets(); updatePlan();
+  document.querySelectorAll('.stepper').forEach(st => {
+    const k = st.dataset.key, inp = st.querySelector('input');
+    if (document.activeElement !== inp) inp.value = fmtTrim(S[k], +st.dataset.dec);
+  });
+}
+function bindSteppers() {
+  document.querySelectorAll('.stepper').forEach(st => {
+    const k = st.dataset.key, step = +st.dataset.step, min = +st.dataset.min, max = +st.dataset.max, dec = +st.dataset.dec;
+    const inp = st.querySelector('input');
+    const set = v => {
+      S[k] = clamp(Math.round(v * 1000) / 1000, min, max);
+      if (k === 'dist') S.preset = 'free';
+      saveSettings(); refreshSetup();
+    };
+    inp.addEventListener('change', () => {
+      const v = parseFloat(inp.value.replace(',', '.'));
+      if (Number.isFinite(v)) set(v); else refreshSetup();
+    });
+    inp.addEventListener('focus', () => setTimeout(() => inp.select(), 0));
+    st.querySelectorAll('.sb').forEach(btn => {
+      const d = +btn.dataset.d;
+      let t1 = null, t2 = null;
+      const doStep = () => {
+        const cur = Number.isFinite(parseFloat(inp.value.replace(',', '.'))) ? parseFloat(inp.value.replace(',', '.')) : S[k];
+        set((Math.round(cur / step) * step) + d * step);
+      };
+      const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
+      btn.addEventListener('pointerdown', e => { e.preventDefault(); doStep(); t1 = setTimeout(() => { t2 = setInterval(doStep, 90); }, 450); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+    });
+  });
+}
+
+function startRunFlow(sim) {
+  initAudio();
+  resetRun(sim);
+  if (sim) RUN.simScale = +$('#simScale').value;
+  startGPS(); lockScreen(); show('run'); render();
+}
+
+/* ---------- koppelingen ---------- */
+function init() {
+  bindSteppers(); buildSegs(); refreshSetup();
+  $('#vol').value = S.vol;
+  $('#vol').addEventListener('input', e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol; saveSettings(); });
+  $('#melodyOn').checked = S.melodyOn;
+  $('#melodyOn').addEventListener('change', e => { S.melodyOn = e.target.checked; saveSettings(); });
+  $('#tLow').addEventListener('click', () => { initAudio(); beepLow(); });
+  $('#tHigh').addEventListener('click', () => { initAudio(); beepHigh(); });
+
+  $('#btnToReady').addEventListener('click', () => startRunFlow(false));
+  $('#btnSim').addEventListener('click', () => startRunFlow(true));
+  $('#btnStart').addEventListener('click', startCountdown);
+  $('#btnBack').addEventListener('click', () => {
+    if (RUN.state === 'countdown') return;
+    stopGPS(); unlockScreen(); RUN.state = 'setup'; show('setup');
+  });
+  $('#btnPause').addEventListener('click', pauseResume);
+  $('#btnStop').addEventListener('click', () => $('#confirm').classList.add('on'));
+  $('#btnStopNo').addEventListener('click', () => $('#confirm').classList.remove('on'));
+  $('#btnStopYes').addEventListener('click', () => finishRun(false));
+  $('#btnAgain').addEventListener('click', () => { RUN.state = 'setup'; show('setup'); });
+  $('#btnCopy').addEventListener('click', () => {
+    const b = $('#btnCopy');
+    const ok = () => { b.textContent = 'Gekopieerd'; setTimeout(() => { b.textContent = 'Kopieer samenvatting'; }, 1800); };
+    try { navigator.clipboard.writeText(lastSummaryText).then(ok, () => {}); } catch (e) {}
+  });
+
+  const sn = loadJSON(KEY_RUN);
+  if (sn && Date.now() - sn.savedAt < 8 * 3600e3 && sn.dist > 0) {
+    $('#resumeBox').style.display = 'block';
+    $('#resumeTxt').textContent = `${fmt(sn.dist / 1000, 2)} km na ${fmtTime(sn.el)}. Hervatten gaat door in pauze, tik dan op Hervat.`;
+    $('#btnResume').addEventListener('click', () => { $('#resumeBox').style.display = 'none'; restoreSnap(sn); });
+    $('#btnDiscard').addEventListener('click', () => { delKey(KEY_RUN); $('#resumeBox').style.display = 'none'; });
+  } else if (sn) delKey(KEY_RUN);
+
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(p => {
+      const upd = () => $('#locNotice').classList.toggle('bad', p.state === 'denied');
+      upd(); p.onchange = upd;
+    }).catch(() => {});
+  }
+  if (!('wakeLock' in navigator)) {
+    $('#locNotice').insertAdjacentHTML('beforeend', '<br><b>Let op:</b> dit toestel kan het scherm niet zelf aan houden (iOS 16.4 of nieuwer nodig). Zet Automatisch vergrendelen op Nooit.');
+  }
+
+  setInterval(tick, 250);
+
+  /* icoon voor beginscherm + offline-cache (alleen via https) */
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180;
+    const x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, 180, 180);
+    x.fillStyle = '#4ade80'; x.beginPath(); x.arc(90, 90, 66, 0, 7); x.fill();
+    x.fillStyle = '#03210d'; x.font = 'bold 64px -apple-system,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('km', 90, 94);
+    const l = document.createElement('link'); l.rel = 'apple-touch-icon'; l.href = c.toDataURL('image/png'); document.head.appendChild(l);
+  } catch (e) {}
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    if (window.caches) caches.open('loopcoach-v1').then(c => c.add(location.href)).catch(() => {});
+  }
+}
+
+/* testhaken (alleen om te controleren, geen functie voor de gebruiker) */
+window.__lc = { RUN, S, onFix, fmtPace, smoothSpeed };
+init();
+})();
+</script>
+</body>
+</html>
