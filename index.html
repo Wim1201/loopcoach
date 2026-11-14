@@ -101,6 +101,19 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
 #count{background:#000e}
 #countNum{font-size:min(60vw,320px);font-weight:800;color:var(--ok)}
 
+/* route */
+.tabs{display:flex;gap:8px;margin:8px 0 2px}
+.tabs button{flex:1;min-height:44px;border-radius:12px;border:1.5px solid #ffffff22;background:#ffffff0d;font-size:16px;font-weight:600;color:var(--fg)}
+.tabs button.on{background:#ffffff26;border-color:#ffffff66}
+#mapBox{display:none;flex:1;min-height:200px;flex-direction:column;margin:8px 0 4px}
+#mapLine{font-size:26px;font-weight:800;text-align:center;margin-bottom:6px;font-variant-numeric:tabular-nums}
+#run.ok #mapLine{color:var(--ok)} #run.low #mapLine{color:var(--bad)}
+.routesvg{width:100%;flex:1;min-height:0;max-height:58vh;background:#ffffff0a;border-radius:16px}
+#sumRouteCard .routesvg{height:auto;max-height:none;aspect-ratio:auto;background:#0b0f14}
+.cap{font-size:12px;color:var(--mute);margin-top:6px}
+.leg{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:6px;flex-wrap:wrap}
+.leg i{display:inline-block;width:18px;height:6px;border-radius:3px;margin-right:6px;vertical-align:middle}
+
 /* summary */
 .tot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
 .tot .stat{background:var(--card);border:1px solid var(--line)}
@@ -192,7 +205,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
     <button class="btn sec small" id="btnSim" style="margin-top:0">Test zonder te lopen (simulatie)</button>
     <select id="simScale" aria-label="Simulatiesnelheid"><option value="1">1×</option><option value="10" selected>10×</option><option value="30">30×</option></select>
   </div>
-  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking, geen externe verbindingen.<br>versie 3 · geluid via mediaspeler, zonder cache</div>
+  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking, geen externe verbindingen.<br>versie 4 · met route</div>
 </section>
 
 <!-- ============ RUN ============ -->
@@ -200,6 +213,12 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
   <div class="top">
     <span class="pill" id="gps">GPS zoeken…</span>
     <span class="pill" id="runInfo"></span>
+  </div>
+  <div class="tabs"><button id="tabNum" class="on">Cijfers</button><button id="tabMap">Kaart</button></div>
+  <div id="mapBox">
+    <div id="mapLine">–,– km/u</div>
+    <svg id="routeRun" class="routesvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Route"></svg>
+    <div class="leg"><span><i style="background:#4ade80"></i>op snelheid</span><span><i style="background:#ff6b6b"></i>te langzaam</span><span>noord is boven</span></div>
   </div>
   <div class="speedbox">
     <div class="speed" id="speed">–,–</div>
@@ -234,6 +253,10 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
   <h1 id="sumTitle">Klaar</h1>
   <p class="sub" id="sumSub"></p>
   <div class="tot" id="sumTot"></div>
+  <div class="card" id="sumRouteCard" style="display:none"><h2>Route</h2>
+    <svg id="routeSum" class="routesvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Route"></svg>
+    <div class="leg"><span><i style="background:#4ade80"></i>op snelheid</span><span><i style="background:#ff6b6b"></i>te langzaam</span><span>noord is boven · cijfers = kilometers</span></div>
+  </div>
   <div class="card splits"><h2>Kilometertijden</h2><div id="sumRows"></div></div>
   <button class="btn sec small" id="btnCopy">Kopieer samenvatting</button>
   <button class="btn primary" id="btnAgain">Nieuwe run</button>
@@ -471,7 +494,7 @@ const STALE = 10000;     // ms zonder bruikbare fix = geen signaal
 function resetRun(sim) {
   Object.assign(RUN, {
     state: 'ready', sim, target: S.dist * 1000, speedKmh: S.speed, zMs: S.z * 60000, win: S.win * 1000,
-    dist: 0, acc: 0, resumedAt: null, last: null, kf: null, simTrue: 0, hist: [], splits: [], nextBeepAt: S.z * 60000,
+    dist: 0, acc: 0, resumedAt: null, last: null, kf: null, simTrue: 0, track: [], finishPos: null, view: 'num', lastDraw: 0, hist: [], splits: [], nextBeepAt: S.z * 60000,
     lastFixT: null, accuracy: null, sp: null, outliers: 0, finalEl: null, completed: false,
     gpsErr: null, watchId: null, simTimer: null, lastRestart: 0, snapTick: 0
   });
@@ -514,6 +537,7 @@ function onFix(f) {
     RUN.kf = { lat: f.lat, lon: f.lon, P: Math.max(f.acc, 3) ** 2, el };
     RUN.last = { lat: f.lat, lon: f.lon, el };
     RUN.hist.push({ t: el, d: RUN.dist });
+    RUN.track.push({ lat: f.lat, lon: f.lon, c: 0, brk: true });
     return;
   }
   const kf = RUN.kf;
@@ -523,6 +547,7 @@ function onFix(f) {
     if (++RUN.outliers >= 5) {
       RUN.kf = { lat: f.lat, lon: f.lon, P: Math.max(f.acc, 3) ** 2, el };
       RUN.last = { lat: f.lat, lon: f.lon, el }; RUN.outliers = 0;
+      RUN.track.push({ lat: f.lat, lon: f.lon, c: 0, brk: true });
     }
     return;
   }
@@ -537,13 +562,16 @@ function onFix(f) {
   const stationary = f.speed != null && f.speed >= 0 && f.speed < 0.3;
   const minStep = Math.max(1.5, f.acc * 0.3);
   if (!stationary && seg >= minStep) {
-    const d0 = RUN.dist, t0 = RUN.last.el;
+    const d0 = RUN.dist, t0 = RUN.last.el, p0 = RUN.last;
     RUN.dist += seg;
-    recordSplits(d0, RUN.dist, t0, el);
+    recordSplits(d0, RUN.dist, t0, el, p0, kf);
     RUN.last = { lat: kf.lat, lon: kf.lon, el };
     RUN.hist.push({ t: el, d: RUN.dist });
+    const spNow = smoothSpeed();
+    RUN.track.push({ lat: kf.lat, lon: kf.lon, c: spNow == null ? 0 : (onTarget(spNow) ? 1 : 2) });
     if (RUN.dist >= RUN.target) {
-      const at = t0 + (RUN.target - d0) / (RUN.dist - d0) * (el - t0);
+      const fr = (RUN.target - d0) / (RUN.dist - d0), at = t0 + fr * (el - t0);
+      RUN.finishPos = { lat: p0.lat + fr * (kf.lat - p0.lat), lon: p0.lon + fr * (kf.lon - p0.lon) };
       finishRun(true, at);
     }
   } else {
@@ -552,12 +580,14 @@ function onFix(f) {
   const cut = el - 60000;
   while (RUN.hist.length > 2 && RUN.hist[0].t < cut) RUN.hist.shift();
 }
-function recordSplits(d0, d1, t0, t1) {
+function recordSplits(d0, d1, t0, t1, p0, p1) {
   const lim = Math.min(d1, RUN.target);
   for (;;) {
     const k = RUN.splits.length + 1, dm = k * 1000;
     if (dm > lim + 1e-6) break;
-    RUN.splits.push({ km: k, at: t0 + (dm - d0) / (d1 - d0) * (t1 - t0) });
+    const fr = (dm - d0) / (d1 - d0);
+    RUN.splits.push({ km: k, at: t0 + fr * (t1 - t0),
+      pos: p0 && p1 ? { lat: p0.lat + fr * (p1.lat - p0.lat), lon: p0.lon + fr * (p1.lon - p0.lon) } : null });
   }
 }
 /* gladde snelheid: afgelegd pad over een venster van 10-20 s */
@@ -584,7 +614,10 @@ function startSim() {
     if (RUN.state === 'running') {
       const tv = elapsed() / 1000;
       v = RUN.speedKmh / 3.6 * (1 + 0.10 * Math.sin(tv / 70)) + (Math.random() - 0.5) * 0.3;
-      sim.lat += v * dt / 111320; RUN.simTrue += v * dt;
+      const h = tv * 0.004;                       // geleidelijke bocht, zodat de route een vorm krijgt
+      sim.lat += v * dt * Math.cos(h) / 111320;
+      sim.lon += v * dt * Math.sin(h) / (111320 * Math.cos(sim.lat * Math.PI / 180));
+      RUN.simTrue += v * dt;
     }
     let lat = sim.lat + (Math.random() - 0.5) * 5 / 111320;
     const lon = sim.lon + (Math.random() - 0.5) * 5 / (111320 * Math.cos(sim.lat * Math.PI / 180));
@@ -640,11 +673,12 @@ function finishRun(completed, atEl) {
 function saveSnap() {
   if (RUN.sim || !['running', 'paused'].includes(RUN.state)) return;
   saveJSON(KEY_RUN, { dist: RUN.dist, el: elapsed(), splits: RUN.splits, nextBeepAt: RUN.nextBeepAt,
-    cfg: { target: RUN.target, speedKmh: RUN.speedKmh, zMs: RUN.zMs, win: RUN.win }, savedAt: Date.now() });
+    cfg: { target: RUN.target, speedKmh: RUN.speedKmh, zMs: RUN.zMs, win: RUN.win }, savedAt: Date.now(),
+    track: RUN.track.filter((p, i) => p.brk || i % 3 === 0) });
 }
 function restoreSnap(sn) {
   resetRun(false);
-  Object.assign(RUN, sn.cfg, { dist: sn.dist, acc: sn.el, splits: sn.splits, nextBeepAt: sn.nextBeepAt, state: 'paused' });
+  Object.assign(RUN, sn.cfg, { dist: sn.dist, acc: sn.el, splits: sn.splits, nextBeepAt: sn.nextBeepAt, state: 'paused', track: sn.track || [] });
   initAudio(); startGPS(); lockScreen(); show('run'); render();
 }
 
@@ -668,6 +702,58 @@ function tick() {
     if (++RUN.snapTick % 16 === 0) saveSnap();
   }
   render();
+}
+
+/* ---------- route tekenen (eenvoudige lijn, geen kaartondergrond, geen internet nodig) ---------- */
+const COL = ['#6b7280', '#4ade80', '#ff6b6b'];
+function drawRoute(svg, track, marks, cur, endPos) {
+  if (!svg) return false;
+  if (!track || track.length < 2) { svg.innerHTML = ''; return false; }
+  const cosL = Math.cos(track[0].lat * Math.PI / 180);
+  const P = track.map(p => ({ x: p.lon * cosL * 111320, y: -p.lat * 111320, c: p.c, brk: p.brk }));
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  P.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+  const spanX = Math.max(maxX - minX, 30), spanY = Math.max(maxY - minY, 30);
+  const W = 1000, pad = 70, sc = (W - 2 * pad) / Math.max(spanX, spanY);
+  const w = spanX * sc + 2 * pad, h = spanY * sc + 2 * pad + 30;
+  const X = x => (x - minX) * sc + pad, Y = y => (y - minY) * sc + pad;
+  const pos = ll => ({ x: X(ll.lon * cosL * 111320), y: Y(-ll.lat * 111320) });
+  let out = '', d = '', col = null;
+  for (let i = 1; i < P.length; i++) {
+    if (P[i].brk) { if (d) out += `<path d="${d}" stroke="${COL[col]}"/>`; d = ''; col = null; continue; }
+    const a = P[i - 1], b = P[i];
+    if (col !== b.c) {
+      if (d) out += `<path d="${d}" stroke="${COL[col]}"/>`;
+      d = `M${X(a.x).toFixed(1)} ${Y(a.y).toFixed(1)}`; col = b.c;
+    }
+    d += `L${X(b.x).toFixed(1)} ${Y(b.y).toFixed(1)}`;
+  }
+  if (d) out += `<path d="${d}" stroke="${COL[col]}"/>`;
+  out = `<g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${out}</g>`;
+  const s0 = P[0];
+  out += `<circle cx="${X(s0.x).toFixed(1)}" cy="${Y(s0.y).toFixed(1)}" r="13" fill="#fff" stroke="#000" stroke-width="3"/>`;
+  (marks || []).forEach(m => {
+    if (!m.pos) return;
+    const q = pos(m.pos);
+    out += `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="19" fill="#000" stroke="#fff" stroke-width="3"/>` +
+           `<text x="${q.x.toFixed(1)}" y="${(q.y + 7).toFixed(1)}" font-size="21" font-weight="700" text-anchor="middle" fill="#fff" font-family="-apple-system,sans-serif">${m.km}</text>`;
+  });
+  if (endPos) { const q = pos(endPos); out += `<rect x="${(q.x - 13).toFixed(1)}" y="${(q.y - 13).toFixed(1)}" width="26" height="26" rx="4" fill="#fff" stroke="#000" stroke-width="3"/>`; }
+  if (cur) {
+    const t = P[P.length - 1];
+    out += `<circle cx="${X(t.x).toFixed(1)}" cy="${Y(t.y).toFixed(1)}" r="16" fill="#38bdf8" stroke="#fff" stroke-width="4"/>`;
+  }
+  const spanM = (w - 2 * pad) / sc;
+  const nice = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+  let bar = nice[0];
+  nice.forEach(n => { if (n <= spanM * 0.4) bar = n; });
+  const bx = pad, by = h - 18, bl = bar * sc;
+  out += `<line x1="${bx}" y1="${by}" x2="${(bx + bl).toFixed(1)}" y2="${by}" stroke="#9aa4b2" stroke-width="5"/>` +
+         `<text x="${(bx + bl + 12).toFixed(1)}" y="${by + 8}" font-size="24" fill="#9aa4b2" font-family="-apple-system,sans-serif">${bar >= 1000 ? bar / 1000 + ' km' : bar + ' m'}</text>`;
+  svg.setAttribute('viewBox', `0 0 ${w.toFixed(0)} ${h.toFixed(0)}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.innerHTML = out;
+  return true;
 }
 
 /* ---------- weergave ---------- */
@@ -740,6 +826,15 @@ function render() {
     ? `Volgend piepje over ${fmtTime(Math.max(0, RUN.nextBeepAt - el))}` + (RUN.lastBeep ? ` · laatste: ${RUN.lastBeep} (${fmtTime(RUN.lastBeepAt)})` : '')
     : `Piepje elke ${fmtTrim(RUN.zMs / 60000, 2)} min · lage toon = te langzaam`);
 
+  const mapView = RUN.view === 'map' && st !== 'ready' && st !== 'countdown';
+  $('#mapBox').style.display = mapView ? 'flex' : 'none';
+  $('.speedbox').style.display = mapView ? 'none' : '';
+  $('.grid').style.display = mapView ? 'none' : '';
+  $('#tabNum').classList.toggle('on', !mapView); $('#tabMap').classList.toggle('on', mapView);
+  if (mapView) {
+    setText('#mapLine', `${sp == null ? '–,–' : fmt(sp, 1)} km/u · ${fmt(dist / 1000, 2)} km`);
+    if (now() - RUN.lastDraw > 1000 || RUN.lastDraw === 0) { RUN.lastDraw = now(); drawRoute($('#routeRun'), RUN.track, RUN.splits, true, null); }
+  }
   $('#ctlReady').style.display = st === 'ready' || st === 'countdown' ? 'grid' : 'none';
   $('#ctlRun').style.display = st === 'running' || st === 'paused' ? 'grid' : 'none';
   setText('#btnPause', st === 'paused' ? 'Hervat' : 'Pauze');
@@ -781,6 +876,8 @@ function buildSummary() {
       `<div class="sp" style="color:${col}">${fmt(r.kmh, 1)} km/u<small>${fmtPace(r.pace)} min/km</small></div></div>`;
   }).join('') : '<div style="color:var(--mute);font-size:15px">Nog geen volle kilometer gelopen.</div>';
 
+  const hasRoute = drawRoute($('#routeSum'), RUN.track, RUN.splits, false, RUN.completed ? RUN.finishPos : null);
+  $('#sumRouteCard').style.display = hasRoute ? '' : 'none';
   lastSummaryText = [
     `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}`,
     `Gemiddeld ${fmt(avgKmh, 1)} km/u (${fmtPace(3600 / avgKmh)} min/km), doel ${fmt(RUN.speedKmh, 1)} km/u, ${schedTxt}`,
@@ -885,6 +982,8 @@ function init() {
     stopGPS(); unlockScreen(); RUN.state = 'setup'; show('setup');
   });
   $('#btnPause').addEventListener('click', pauseResume);
+  $('#tabNum').addEventListener('click', () => { RUN.view = 'num'; render(); });
+  $('#tabMap').addEventListener('click', () => { RUN.view = 'map'; RUN.lastDraw = 0; render(); });
   $('#btnStop').addEventListener('click', () => $('#confirm').classList.add('on'));
   $('#btnStopNo').addEventListener('click', () => $('#confirm').classList.remove('on'));
   $('#btnStopYes').addEventListener('click', () => finishRun(false));
