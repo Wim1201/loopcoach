@@ -225,7 +225,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
     <button class="btn sec small" id="btnSim" style="margin-top:0">Test zonder te lopen (simulatie)</button>
     <select id="simScale" aria-label="Simulatiesnelheid"><option value="1">1×</option><option value="10" selected>10×</option><option value="30">30×</option></select>
   </div>
-  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking. Alleen als je de kaartoptie aanzet, haalt de app kaartplaatjes op bij OpenStreetMap.<br>versie 6 · met kaart in het overzicht</div>
+  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking. Alleen als je de kaartoptie aanzet, haalt de app kaartplaatjes op bij OpenStreetMap.<br>versie 7 · met tijden en plaats</div>
 </section>
 
 <!-- ============ RUN ============ -->
@@ -272,6 +272,12 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
 <section id="summary" class="screen">
   <h1 id="sumTitle">Klaar</h1>
   <p class="sub" id="sumSub"></p>
+  <div class="card" id="sumWhen">
+    <div id="sumTimes" style="font-size:17px;font-weight:600;line-height:1.5"></div>
+    <label for="placeIn" style="display:block;margin-top:10px;font-size:14px;color:var(--mute)">Plaats of route (zelf in te vullen)</label>
+    <input type="text" id="placeIn" maxlength="60" autocomplete="off" autocapitalize="words" placeholder="bijvoorbeeld Dongen, Vredeoord"
+      style="width:100%;height:52px;border-radius:12px;border:1.5px solid var(--line);background:#161b22;color:var(--fg);font-size:18px;padding:0 12px;margin-top:6px;-webkit-user-select:text;user-select:text">
+  </div>
   <div class="tot" id="sumTot"></div>
   <div class="card" id="sumRouteCard" style="display:none"><h2>Route</h2>
     <svg id="routeSum" class="routesvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Route"></svg>
@@ -345,7 +351,7 @@ const PRESETS = [
 ];
 const MELODY_NAMES = ['Fanfare', 'Ode aan de vreugde', 'Huppelloopje'];
 const S = Object.assign(
-  { dist: 10, preset: '10', speed: 10, z: 1, win: 15, vol: 0.8, melodyOn: true, melody: 0, mode: 'beep', name: '', mix: true, rate: 1, map: false },
+  { dist: 10, preset: '10', speed: 10, z: 1, win: 15, vol: 0.8, melodyOn: true, melody: 0, mode: 'beep', name: '', mix: true, rate: 1, map: false, place: '' },
   loadJSON(KEY_SET) || {}
 );
 const saveSettings = () => saveJSON(KEY_SET, S);
@@ -744,7 +750,7 @@ function startCountdown() {
     if (n > 0) { $('#countNum').textContent = n; beepTick(); n--; setTimeout(step, 1000); }
     else {
       box.classList.remove('on'); beepGo();
-      RUN.state = 'running'; RUN.acc = 0; RUN.resumedAt = now();
+      RUN.state = 'running'; RUN.acc = 0; RUN.resumedAt = now(); RUN.wallStart = Date.now(); RUN.wallEnd = null;
       RUN.last = null; RUN.kf = null; RUN.hist = []; RUN.nextBeepAt = RUN.zMs;
       lockScreen(); render();
       if (S.mode !== 'beep') setTimeout(() => coachSay('start', true), 700);
@@ -769,7 +775,7 @@ function finishRun(completed, atEl) {
   const el = elapsed();
   const fin = completed ? Math.min(atEl, el) : el;
   if (RUN.resumedAt !== null) { RUN.acc += now() - RUN.resumedAt; RUN.resumedAt = null; }
-  RUN.finalEl = fin; RUN.completed = completed; RUN.state = 'done';
+  RUN.finalEl = fin; RUN.completed = completed; RUN.state = 'done'; RUN.wallEnd = Date.now();
   if (completed) RUN.dist = RUN.target;
   stopGPS(); unlockScreen(); delKey(KEY_RUN);
   $('#confirm').classList.remove('on');
@@ -783,7 +789,7 @@ function finishRun(completed, atEl) {
 function saveSnap() {
   if (RUN.sim || !['running', 'paused'].includes(RUN.state)) return;
   saveJSON(KEY_RUN, { dist: RUN.dist, el: elapsed(), splits: RUN.splits, nextBeepAt: RUN.nextBeepAt,
-    cfg: { target: RUN.target, speedKmh: RUN.speedKmh, zMs: RUN.zMs, win: RUN.win }, savedAt: Date.now(),
+    cfg: { target: RUN.target, speedKmh: RUN.speedKmh, zMs: RUN.zMs, win: RUN.win, wallStart: RUN.wallStart }, savedAt: Date.now(),
     track: RUN.track.filter((p, i) => p.brk || i % 3 === 0) });
 }
 function restoreSnap(sn) {
@@ -1026,8 +1032,29 @@ function buildSummary() {
 
   const hasRoute = drawRoute($('#routeSum'), RUN.track, RUN.splits, false, RUN.completed ? RUN.finishPos : null, !!S.map);
   $('#sumRouteCard').style.display = hasRoute ? '' : 'none';
-  lastSummaryText = [
-    `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}`,
+  SUMDATA = { dist, tot, avgKmh, schedTxt, rows };
+  const hasT = !!RUN.wallStart;
+  $('#sumTimes').innerHTML = hasT ? whenText(RUN.wallStart, RUN.wallEnd) : '';
+  $('#sumTimes').style.display = hasT ? '' : 'none';
+  $('#placeIn').value = S.place || '';
+  lastSummaryText = summaryText();
+}
+
+/* tijden en samenvattingstekst */
+let SUMDATA = null;
+const hm = ms => new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+const dayTxt = ms => new Date(ms).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+function whenText(a, b) {
+  return `${dayTxt(a)}<br>Start ${hm(a)} · einde ${b ? hm(b) : '–'}`;
+}
+function summaryText() {
+  if (!SUMDATA) return '';
+  const { dist, tot, avgKmh, schedTxt, rows } = SUMDATA;
+  const place = ($('#placeIn') ? $('#placeIn').value : S.place || '').trim();
+  const when = RUN.wallStart ? `${dayTxt(RUN.wallStart)}, ${hm(RUN.wallStart)}–${RUN.wallEnd ? hm(RUN.wallEnd) : '?'}` : '';
+  return [
+    `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}` + (place ? ` · ${place}` : ''),
+    ...(when ? [when] : []),
     `Gemiddeld ${fmt(avgKmh, 1)} km/u (${fmtPace(3600 / avgKmh)} min/km), doel ${fmt(RUN.speedKmh, 1)} km/u, ${schedTxt}`,
     ...rows.map(r => `${r.label}: ${fmtTime(r.ms)} (${fmt(r.kmh, 1)} km/u)`)
   ].join('\n');
@@ -1139,6 +1166,7 @@ function init() {
   buildModeSeg();
   $('#coachName').value = S.name || '';
   $('#coachName').addEventListener('input', e => { S.name = e.target.value.slice(0, 20); saveSettings(); });
+  $('#placeIn').addEventListener('input', e => { S.place = e.target.value; saveSettings(); lastSummaryText = summaryText(); });
   $('#mapOn').checked = !!S.map;
   $('#mapOn').addEventListener('change', e => { S.map = e.target.checked; saveSettings(); });
   $('#mixOn').checked = S.mix !== false;
@@ -1169,7 +1197,7 @@ function init() {
   $('#btnCopy').addEventListener('click', () => {
     const b = $('#btnCopy');
     const ok = () => { b.textContent = 'Gekopieerd'; setTimeout(() => { b.textContent = 'Kopieer samenvatting'; }, 1800); };
-    try { navigator.clipboard.writeText(lastSummaryText).then(ok, () => {}); } catch (e) {}
+    try { navigator.clipboard.writeText(summaryText()).then(ok, () => {}); } catch (e) {}
   });
 
   const sn = loadJSON(KEY_RUN);
