@@ -173,9 +173,29 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
       <input inputmode="decimal" aria-label="Interval in minuten">
       <button class="sb" data-d="1" aria-label="Langer interval">+</button>
     </div>
-    <div class="unit">minuten tussen de piepjes</div>
+    <div class="unit">minuten tussen de aanwijzingen (piepjes of spraak)</div>
     <div class="row"><span style="font-size:15px;color:var(--mute)">Snelheid uitmiddelen over</span></div>
     <div class="seg" id="winSeg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Coach</h2>
+    <div class="seg" id="modeSeg"></div>
+    <div class="unit" id="modeNote" style="text-align:left"></div>
+    <div class="row"><label for="coachName">Naam van de loper (optioneel)</label></div>
+    <input type="text" id="coachName" maxlength="20" autocomplete="off" autocapitalize="words" placeholder="bijvoorbeeld Wim"
+      style="width:100%;height:52px;border-radius:12px;border:1.5px solid var(--line);background:#161b22;color:var(--fg);font-size:18px;padding:0 12px;-webkit-user-select:text;user-select:text">
+    <div class="seg"><button class="mini" id="tSay">Proefzin van de coach</button></div>
+    <div class="row">
+      <label for="mixOn">Mengen met radio en muziek</label>
+      <span class="switch"><input type="checkbox" id="mixOn"><i></i></span>
+    </div>
+    <div class="unit" style="text-align:left">Aan: de radio of muziek blijft spelen. De piepjes volgen dan wel de stilteschakelaar, dus zet die uit (geen oranje streep). Uit: de app onderbreekt andere audio, maar klinkt altijd.</div>
+    <div class="row">
+      <label for="mapOn">Kaart onder de route in het eindoverzicht</label>
+      <span class="switch"><input type="checkbox" id="mapOn"><i></i></span>
+    </div>
+    <div class="unit" style="text-align:left">Aan: na afloop haalt de app kaartplaatjes op bij OpenStreetMap (internet nodig, uitsluitend in het overzicht). OpenStreetMap ziet dan ongeveer waar je gelopen hebt. Uit: er gaat niets naar buiten.</div>
   </div>
 
   <div class="card">
@@ -205,7 +225,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
     <button class="btn sec small" id="btnSim" style="margin-top:0">Test zonder te lopen (simulatie)</button>
     <select id="simScale" aria-label="Simulatiesnelheid"><option value="1">1×</option><option value="10" selected>10×</option><option value="30">30×</option></select>
   </div>
-  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking, geen externe verbindingen.<br>versie 5 · radio blijft spelen</div>
+  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking. Alleen als je de kaartoptie aanzet, haalt de app kaartplaatjes op bij OpenStreetMap.<br>versie 6 · met kaart in het overzicht</div>
 </section>
 
 <!-- ============ RUN ============ -->
@@ -325,7 +345,7 @@ const PRESETS = [
 ];
 const MELODY_NAMES = ['Fanfare', 'Ode aan de vreugde', 'Huppelloopje'];
 const S = Object.assign(
-  { dist: 10, preset: '10', speed: 10, z: 1, win: 15, vol: 0.8, melodyOn: true, melody: 0 },
+  { dist: 10, preset: '10', speed: 10, z: 1, win: 15, vol: 0.8, melodyOn: true, melody: 0, mode: 'beep', name: '', mix: true, rate: 1, map: false },
   loadJSON(KEY_SET) || {}
 );
 const saveSettings = () => saveJSON(KEY_SET, S);
@@ -373,7 +393,8 @@ function getWav(key, notes) {
   return AUD.cache.get(key);
 }
 function initAudio() {
-  try { if (navigator.audioSession) navigator.audioSession.type = 'transient';  /* kort signaal: radio even zachter, speelt daarna door */ } catch (e) {}
+  try { if (navigator.audioSession) navigator.audioSession.type = S.mix ? 'ambient' : 'playback'; } catch (e) {}
+  try { if ('speechSynthesis' in window && !COACH.unlocked) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); COACH.unlocked = true; } } catch (e) {}
   if (!AUD.pool.length) {
     for (let i = 0; i < 3; i++) {
       const a = new Audio();
@@ -429,6 +450,9 @@ function updateDiag() {
   d.textContent = AUD.mode
     ? `Laatste geluid: ${AUD.mode}${AUD.err ? ' · melding: ' + AUD.err : ''}. Hoor je niets, zet dan het mediavolume omhoog en controleer of Safari niet is gedempt (menu Aa in de adresbalk).`
     : 'Tik op een testknop. Hoor je niets, zet dan het mediavolume omhoog en controleer of Safari niet is gedempt (menu Aa in de adresbalk).';
+  let as = 'niet ondersteund'; try { if (navigator.audioSession) as = navigator.audioSession.type; } catch (e) {}
+  d.textContent += `\nSpraak: ${'speechSynthesis' in window ? (COACH.voice ? COACH.voice.name : 'geen Nederlandse stem') : 'niet ondersteund'} · audiosessie: ${as}`;
+  d.style.whiteSpace = 'pre-line';
 }
 const B = {
   low:   [{ f: 240, at: 0, dur: 0.75, type: 'triangle', vol: 1 }],
@@ -495,7 +519,7 @@ function resetRun(sim) {
   Object.assign(RUN, {
     state: 'ready', sim, target: S.dist * 1000, speedKmh: S.speed, zMs: S.z * 60000, win: S.win * 1000,
     dist: 0, acc: 0, resumedAt: null, last: null, kf: null, simTrue: 0, track: [], finishPos: null, view: 'num', lastDraw: 0, hist: [], splits: [], nextBeepAt: S.z * 60000,
-    lastFixT: null, accuracy: null, sp: null, outliers: 0, finalEl: null, completed: false,
+    fired: new Set(), nogAnn: false, lastCue: '', lastCueAt: 0, lastFixT: null, accuracy: null, sp: null, outliers: 0, finalEl: null, completed: false,
     gpsErr: null, watchId: null, simTimer: null, lastRestart: 0, snapTick: 0
   });
 }
@@ -626,6 +650,87 @@ function startSim() {
   }, Math.max(10, 1000 / (RUN.simScale || 10)));
 }
 
+/* ---------- gesproken coach ----------
+   Zinnen uit de bibliotheek (cat, toon, tekst). Toon: h grappig, u uitdagend, m motiverend, p licht plagerig.
+   Regels: geen herhaling (laatste 100 onthouden, ook tussen trainingen), toon wisselt, bij ver onder tempo
+   alleen motiverend/uitdagend, naamzinnen alleen als er een naam is ingevuld. */
+const PHR = [["start","h","Daar gaan we. Je benen weten het nog niet, maar ze doen mee."],["start","h","Start. Ik houd de tijd bij, jij het plezier."],["start","h","En los! Niet te hard van stapel lopen, ik zie je wel."],["start","h","Schoenen veters gestrikt? Dan mag het feest beginnen."],["start","h","Ik ben je coach, jij de benen. Samen vormen we een heel half mens."],["start","h","Veters vast, {naam}? Dan mag de klok lopen."],["start","u","Doel is {doel} kilometer per uur. Laat maar zien wat je kunt."],["start","u","Ik kijk mee. {doel} kilometer per uur, geen excuses."],["start","u","De klok loopt. Pak dat tempo van {doel}."],["start","u","Geen gedoe, geen praatjes. Loop."],["start","u","Dit tempo gaan we vasthouden: {doel} kilometer per uur."],["start","u","{naam}, het tempo is {doel}. Laat maar zien."],["start","m","Mooi dat je er bent. Rustig beginnen, het tempo komt vanzelf."],["start","m","Goed bezig, de eerste stap is al gezet."],["start","m","Je bent begonnen, dat is het moeilijkste deel."],["start","m","Neem de tijd om op gang te komen. Je doet dit voor jezelf."],["start","m","Heerlijk, een nieuwe training. Zet hem lekker neer."],["start","m","Goedemorgen {naam}, rustig beginnen en lekker lopen."],["start","m","Daar gaan we, {naam}. Neem de tijd om op gang te komen."],["start","p","Daar ben je dan. Ik begon me al af te vragen of je de bank zou loslaten."],["start","p","Jij liep dus toch niet weg van deze training. Goed zo."],["start","p","Ik had je pas over tien minuten verwacht. Goed dat je er al bent."],["start","p","Dus we gaan het echt doen. Ik ben zowaar onder de indruk."],["far_below","u","Je zit op {snelheid}, het doel is {doel}. Tijd om bij te trekken."],["far_below","u","Je loopt achter. Een stapje extra, nu."],["far_below","u","Dat is te langzaam voor je plan. Versnel."],["far_below","u","Te langzaam. Je weet dat je meer kunt."],["far_below","u","Je verliest tijd. Pak hem terug met een paar stevige passen."],["far_below","u","Gas erop. {snelheid} is niet wat je me beloofd hebt."],["far_below","u","Kom op, tempo omhoog. Het schema wacht niet."],["far_below","u","{naam}, je loopt achter op je plan. Tijd om bij te trekken."],["far_below","m","Even wat meer vaart. Je kunt dit, kleine stappen sneller."],["far_below","m","Je zit op {snelheid}. Kort de pas wat in en loop vlotter."],["far_below","m","Geen stress, maar probeer nu iets sneller te lopen."],["far_below","m","Je zit wat te laag, maar je kunt zo weer aanhaken. Iets sneller de benen neerzetten."],["far_below","m","Neem iets grotere stappen en til je knieën wat hoger. Dat helpt."],["far_below","m","Je kunt dit. Een paar tellen sneller, dan sta je er weer."],["far_below","m","Haal diep adem, rol je schouders los en versnel zacht."],["far_below","m","{naam}, een stapje sneller en je zit er weer bij."],["far_below","m","Kom op {naam}, iets meer vaart. Je kunt dit."],["below","h","Net te langzaam. Je zit op {snelheid}, een tikje meer en je bent er."],["below","h","Bijna op snelheid, de laatste paar tienden komen eraan."],["below","h","Een fractie te rustig. Je schoenen hebben nog energie."],["below","h","Een tikkie te gemoedelijk. Even een tandje erbij."],["below","h","Je zit er net onder. Alsof je de lat met je tenen raakt."],["below","h","Bijna, bijna. Als ik een trommel had, sloeg ik nu sneller."],["below","h","Dit is het tempo van bijna goed. Naar goed is het maar een paar tienden."],["below","h","Net eronder, {naam}. Je schoenen hebben nog energie."],["below","u","{snelheid} is bijna goed. Pak die laatste tienden nog."],["below","u","Net eronder. Duw nog even door."],["below","u","Dat kan beter. Trek je tempo naar {doel}."],["below","u","Even nog wat tienden erbij, dan ben je er."],["below","u","Schuif je tempo omhoog, het ligt binnen bereik."],["below","u","Je zit er net onder. Dat accepteer ik niet."],["below","u","Een minuutje iets harder, dan zit je weer goed."],["below","u","{naam}, nog een paar tienden erbij."],["below","m","Je zit er dicht bij. Iets meer snelheid en je ligt op schema."],["below","m","Bijna op tempo. Houd vol en versnel zacht."],["below","m","Goed bezig, nog een klein beetje sneller."],["below","m","Je loopt prima, nu nog net iets meer vaart."],["below","m","Je zit er heel dichtbij. Een paar korte passen extra en je bent er."],["below","m","Mooi werk tot nu toe. Versnel een klein beetje."],["below","m","Vlot doorlopen, met iets meer kracht uit je stappen."],["below","m","Bijna, {naam}. Een fractie sneller en je ligt op schema."],["below","p","Net niet. Ik zeg het alleen omdat het kan."],["below","p","Bijna goed. Bijna, hè."],["below","p","Net onder. Ik zeg het met een glimlach."],["below","p","Jij kunt beter dan {snelheid}. Dat weet ik, jij weet het ook."],["below","p","Gaat het niet snel genoeg, of heb je een goede reden?"],["below","p","Zou je even willen kijken naar dat getal? {snelheid}. Net niet."],["on","h","Precies op snelheid. Zo kan ik werkloos blijven."],["on","h","Dat is een metronoom met benen. Goed bezig."],["on","h","{snelheid} kilometer per uur. Dat loopt als een trein."],["on","h","Op snelheid, dus ik kan even koffie halen."],["on","h","Mooi. Zo loopt een mens met een plan."],["on","h","Het tempo staat als een huis. Nou ja, een rennend huis."],["on","h","Precies zoals bedoeld. Mijn dag is gemaakt."],["on","h","{naam}, je loopt als een metronoom met benen."],["on","u","Dit is het tempo. Houd het vast."],["on","u","Op snelheid. Nu volhouden, niet verslappen."],["on","u","Goed. Laat het niet meer zakken."],["on","u","Houd dit vast. Niet slapen."],["on","u","Op tempo, dus niet minderen en niet versnellen."],["on","u","Dit is waarvoor je hier bent. Blijf zo lopen."],["on","u","Strak. Houd die ritmische pas aan."],["on","u","{naam}, dit is het tempo. Vasthouden."],["on","m","Mooi tempo, {snelheid} kilometer per uur. Ga zo door."],["on","m","Je loopt precies goed. Je ademhaling kalm, schouders los."],["on","m","Dit gaat prima. Lekker ritme."],["on","m","Wat loop je mooi. Op tempo en ontspannen."],["on","m","Prachtig ritme. Voel hoe het vanzelf gaat."],["on","m","Je bent op schema, blijf ademen en blijf soepel."],["on","m","Dit is precies goed. Wees trots op je tempo."],["on","m","Mooi tempo, {naam}. Ga zo door."],["on","m","Dat loopt lekker, {naam}."],["on","p","Kijk eens aan, het kan dus wel."],["on","p","Nu loop je zoals je dat zelf van tevoren had bedacht."],["on","p","Ik wilde net wat zeggen, maar ik heb niets te klagen. Vreemd gevoel."],["on","p","Zo, dat heb je netjes gedaan. Verwacht geen taart."],["on","p","Je loopt gewoon goed. Dat zeg ik niet vaak."],["on","p","Op tempo. Ik ga me vervelen als dit zo doorgaat."],["on","p","Kijk eens aan {naam}, het kan dus wel."],["above","h","Je zit boven je doel. Heb je haast, of is er taart?"],["above","h","Snel hoor. Ik moet bijna mijn sokken vasthouden."],["above","h","{snelheid}! Je loopt me er bijna uit."],["above","h","Sneller dan gepland. Heb je de bus gemist?"],["above","h","Je tempo is boven plan. Zo hou je mij aan het werk."],["above","h","Je loopt zo vlot dat de wind een jas aantrekt."],["above","h","Dat is een mooie versnelling. Niet te veel doen, hè."],["above","u","Je loopt sneller dan nodig. Een mooi bonusbedrag aan tijd."],["above","u","Boven je doel. Houd dit alleen vast als het goed voelt."],["above","u","Je hebt ruimte opgebouwd. Gebruik die slim."],["above","u","Je loopt vlot. Het is aan jou om te bepalen of je dit volhoudt."],["above","u","Sneller dan nodig. Gebruik het als buffer."],["above","u","Je ligt voor. Haal niet alles eruit, bewaar iets voor later."],["above","u","Boven je doel. Let op, een lange afstand wordt in het laatste deel beslist."],["above","u","{naam}, je ligt voor. Bewaar iets voor later."],["above","m","Sterk bezig, je zit boven je tempo. Voel je dat het soepel gaat?"],["above","m","Mooi, je loopt vlot. Let op dat je het kunt volhouden."],["above","m","Lekker tempo, en je ligt voor op schema."],["above","m","Je loopt lekker snel. Probeer ontspannen te blijven."],["above","m","Dit gaat vlot. Houd je adem rustig en je schouders laag."],["above","m","Heerlijk tempo. Als het goed voelt, ga zo door."],["above","m","Je loopt sterk. Let op dat het ook straks nog gaat."],["above","m","Sterk bezig, {naam}. Houd het soepel."],["above","p","Wat een enthousiasme. Straks heb je nog geen adem voor de finish."],["above","p","Ga je nu opscheppen tegen de wind?"],["above","p","Ineens zo ambitieus? Straks heb je niets meer over."],["above","p","Sneller dan je plan. Ik noem het gewoon enthousiasme."],["above","p","Je zit boven doel, dus ik heb even niets te zeuren. Jammer."],["above","p","Rustig, de finish loopt niet weg."],["above","p","Wat een enthousiasme, {naam}. Straks heb je geen adem meer voor de finish."],["far_above","h","Rustig aan, Usain. Je vliegt voorbij je plan van {doel}."],["far_above","h","Dit is geen sprint, tenzij ik iets gemist heb."],["far_above","h","Je loopt zo hard dat de GPS moeite heeft je bij te houden."],["far_above","h","Mijn GPS rookt bijna. Rustig!"],["far_above","h","Je loopt zo snel dat je schaduw hijgt."],["far_above","h","Is er iemand achter je aan? Dit is ver boven plan."],["far_above","h","Jouw tempo is iets te veel van het goede. Een tandje terug."],["far_above","h","Rustig, {naam}. Dit is een training, geen sprint."],["far_above","u","Je zit ver boven je doel. Dat betaal je later terug, dus wees slim."],["far_above","u","Veel te snel voor je plan. Neem gas terug."],["far_above","u","Dit tempo hou je niet vol. Leg het rustiger neer."],["far_above","u","Ver boven je plan. Zakken, nu, anders betaal je het later."],["far_above","u","Dit is niet het schema. Terug naar {doel}."],["far_above","u","Je verspeelt kracht. Neem gas terug."],["far_above","u","Te snel. Slim lopen is ook sterk lopen."],["far_above","u","{naam}, dit is te snel voor je plan. Terug naar {doel}."],["far_above","m","Je loopt sterk, maar neem wat gas terug zodat je de rest ook haalt."],["far_above","m","Heel vlot, iets rustiger is verstandiger."],["far_above","m","Mooi dat het zo goed gaat. Spaar wat energie voor later."],["far_above","m","Ik zie dat het heel goed gaat, maar een rustiger tempo helpt je de afstand af te maken."],["far_above","m","Fijn dat je zo sterk loopt. Zakken we iets, dan heb je straks meer over."],["far_above","m","Goed bezig, houd je tempo wat in. Het is een lange weg."],["far_above","m","Laat je adem rustig worden en loop wat zachter."],["far_above","m","{naam}, mooi tempo, maar neem iets gas terug zodat je de rest ook haalt."],["far_above","p","Kalmeer eens even. Niemand achtervolgt je."],["far_above","p","Bewijsdrang? Doe maar rustig, het blijft een training."],["far_above","p","Wat een haast. Ik hoop dat je het weet van de finish, die staat er nog."],["far_above","p","Je loopt harder dan je doel. Dat is geen medaille, wel een risico."],["far_above","p","Zo wordt het een korte training. Wil je dat?"],["far_above","p","Haha, rustig aan. Dit is een training, geen wedstrijd."],["p25","h","Een kwart is gehaald. De rest ook nog, maar dat is detail."],["p25","h","Kwart afstand. Dat voelt al als een prestatie, en terecht."],["p25","h","Eerste kwart op de teller. Het eerste hapje van de taart."],["p25","u","Een kwart gedaan. Zet het tempo nu neer."],["p25","u","Eerste kwart klaar. De rest wordt het echte werk."],["p25","u","Kwart gedaan. Het werk begint nu pas echt."],["p25","m","Een kwart van de afstand zit erop. Goed begin."],["p25","m","Je bent al een kwart onderweg. Mooi opgebouwd."],["p25","m","Een kwart gehaald. Je loopt mooi en ligt {voorsprong} op schema."],["p25","p","Een kwart. Je kunt nog altijd omkeren, maar dat ga je niet doen."],["p25","p","Kwart. Nog drie keer hetzelfde. Zo moeilijk is het niet."],["p50","h","Halverwege! Nog even en je hebt de helft van de helft van de helft."],["p50","h","De helft is binnen. De andere helft is minder spannend, dat beloof ik."],["p50","h","Het halfwegpunt. Er is geen koffie, maar wel eer."],["p50","u","Halverwege. Nu telt het. Houd je tempo vast."],["p50","u","De helft is gedaan, dit is waar het verschil wordt gemaakt."],["p50","u","Halverwege en nog niets verloren. Zo houden."],["p50","u","De helft is gehaald, {naam}. Nu telt het."],["p50","m","Halverwege, goed gedaan. Je ligt {voorsprong} op schema."],["p50","m","De helft zit erop. Je loopt mooi, ga zo door."],["p50","m","De helft is binnen. Prachtig werk, ga zo door."],["p50","m","Halverwege, {naam}. Goed gedaan."],["p50","p","Halverwege. Vanaf hier is niet meer terug te kruipen."],["p50","p","De helft. Ik zou er een foto van nemen, maar jij gaat te snel."],["p75","h","Driekwart! Het ruikt al naar finish."],["p75","h","Nog een kwart. Zo weinig dat ik het bijna zelf kan lopen."],["p75","h","Driekwart. Je ruikt de douche al, hè?"],["p75","u","Driekwart gedaan. Nu niet inzakken."],["p75","u","Laatste kwart. Alles wat je nog hebt mag erin."],["p75","u","Nog maar een kwart. Haal alles uit de laatste fase."],["p75","m","Driekwart onderweg. Je bent bijna bij je doel."],["p75","m","Nog een kwart te gaan, en je ligt {voorsprong} op schema."],["p75","m","Driekwart gehaald. Bijna thuis, houd je ritme vast."],["p75","m","Driekwart, {naam}. Je bent er bijna."],["p75","p","Driekwart. Je kunt het nu echt niet meer opgeven, je zou zelf niet kunnen uitleggen waarom."],["p75","p","Driekwart. Nu ga je toch niet nog afhaken?"],["last_km","h","Laatste kilometer. Je benen mogen straks klagen, nu nog niet."],["last_km","h","Nog één kilometer. Eigenlijk een wandelingetje."],["last_km","h","Nog een kilometer en dan mag je weer zeuren over je knieën."],["last_km","u","Laatste kilometer. Alles geven, nu."],["last_km","u","Een kilometer te gaan. Hier win je je tijd."],["last_km","u","Laatste kilometer. Nu geen tempo laten liggen."],["last_km","u","Laatste kilometer, {naam}. Alles geven."],["last_km","m","Nog één kilometer. Je hebt het bijna volbracht."],["last_km","m","Laatste kilometer, geniet ervan. Je hebt hard gewerkt."],["last_km","m","Een kilometer te gaan. Zet je beste benen neer."],["last_km","m","Nog één kilometer, {naam}. Geniet ervan."],["last_km","p","Een kilometer. Dat doe je half slapend. Maar nu graag wakker."],["last_km","p","Een kilometer. Je hebt al meer gelopen dan ik had verwacht."],["last_500","h","Nog vijfhonderd meter. Dat is minder dan een gemiddelde supermarkt."],["last_500","h","Vijfhonderd meter. Dat is een straatje om, plus nog een."],["last_500","u","Vijfhonderd meter. Trek aan, nu."],["last_500","u","Nog vijfhonderd meter. Trek de laatste krachten bij elkaar."],["last_500","m","Nog vijfhonderd meter, je kunt de finish bijna ruiken."],["last_500","m","Vijfhonderd meter te gaan. Je kunt het, het einde is zichtbaar."],["last_500","p","Nog vijfhonderd meter. Straks mag je klagen, nu even niet."],["last_500","p","Vijfhonderd meter. Waar blijft dat finishgezicht?"],["last_100","h","Honderd meter. Zet je beste finishgezicht op."],["last_100","h","Honderd meter. Wuif alvast naar het publiek."],["last_100","u","Honderd meter! Geef alles wat je nog hebt, binnen wat verstandig is."],["last_100","u","Honderd meter! Nu of nooit, kom op."],["last_100","m","Nog honderd meter. Je bent er bijna, ga ervoor."],["last_100","m","Nog even, honderd meter. Je bent er bijna!"],["last_100","m","Honderd meter, {naam}. Daar is de finish."],["last_100","p","Honderd meter. Ik doe alsof ik niet nerveus ben."],["last_100","p","Honderd meter, nu maar eens laten zien wat er in zit."],["finish","h","Gehaald! Je mag nu een enorme berg friet verdienen."],["finish","h","Klaar! Je benen vragen om een stoel, geef ze die."],["finish","h","Finish! Ik zou applaudisseren, maar ik heb geen handen."],["finish","h","Klaar! Je hebt officieel recht op een sandwich."],["finish","h","Finish! Ik haal alvast een handdoek voor je."],["finish","h","Klaar, {naam}. Je hebt een sandwich verdiend."],["finish","u","Doelafstand gehaald. Straks de volgende uitdaging."],["finish","u","Finish. Dat was serieus werk. Wat gaan we de volgende keer doen?"],["finish","u","Gehaald, en dat met overtuiging. De volgende keer iets sneller?"],["finish","u","Finish. Goed werk. Morgen weer een uitdaging."],["finish","u","Gehaald, {naam}. Volgende keer net iets sneller?"],["finish","m","Gehaald! Goed gedaan, rustig uitlopen en wat drinken."],["finish","m","Finish. Je hebt het weer voor elkaar gekregen. Trots op je."],["finish","m","Je hebt het gedaan, prachtig. Neem de tijd om rustig uit te lopen."],["finish","m","Gehaald! Wat een mooie training. Goed voor je."],["finish","m","Gehaald, {naam}. Prachtig gedaan."],["finish","p","Gehaald. Ik had er maar half vertrouwen in, maar je hebt me verrast."],["finish","p","Gehaald, en zonder te klagen. Dat had ik niet verwacht."],["finish","p","De finish. Ik wist het al, maar ik zei er niets over."],["pause","h","Pauze. Ik houd de klok voor je vast."],["pause","h","Even stilstaan, de tijd loopt niet mee."],["pause","h","Pauze. De klok doet even een dutje."],["pause","u","Pauze aan. Maak er geen siësta van."],["pause","u","Pauze. Maar de volgende ronde wil ik je terug zien."],["pause","m","Pauze. Haal rustig adem, drink iets als dat nodig is."],["pause","m","Neem rustig de tijd. Je hebt het verdiend."],["pause","p","Pauze al? Goed, ik wacht."],["pause","p","Pauze. Zeg je het zelf of moet ik je erop wijzen?"],["resume","h","En weer verder. De klok tikt weer."],["resume","h","Hervat. De benen hebben genoeg uitgerust."],["resume","h","En we zijn weer los. De benen liggen weer aan."],["resume","u","Hervat. Pak je tempo weer op."],["resume","u","Terug in de actie. Loop door tot je weer op tempo zit."],["resume","m","Weer verder. Rustig opbouwen naar je tempo."],["resume","m","Mooi, je bent weer onderweg. Rustig opbouwen."],["resume","p","Daar ben je weer. Ik hield je plekje warm."],["resume","p","Terug van de pauze. Ik heb de klok niet vastgehouden, hoor. Wel bijna."],["nogps","h","Ik ben je kwijt. Waar zit je, in een tunnel of onder een boom?"],["nogps","h","Mijn satellieten zijn vakantie aan het vieren."],["nogps","u","Geen GPS-signaal. Blijf lopen, ik zoek verder."],["nogps","u","Geen signaal. Blijf op tempo lopen, ik zoek verder."],["nogps","m","Even geen signaal. Geen zorgen, ik pak het zo weer op."],["nogps","m","Het signaal valt even weg. Loop lekker door."],["nogps","p","GPS weg. Ik zou zeggen dat het aan jou ligt, maar het is vast de omgeving."],["nogps","p","Ik zie je niet meer. Dat kan aan jou liggen, of aan de bomen."],["gps_back","h","Signaal terug. Ik zie je weer."],["gps_back","h","Daar is het signaal weer. Alles onder controle."],["gps_back","u","GPS terug. Verder met het tempo."],["gps_back","u","Signaal terug. Door met je tempo."],["gps_back","m","Het signaal is terug, we gaan weer verder."],["gps_back","m","Mooi, het signaal is terug. Loop rustig verder."],["gps_back","p","Daar ben je weer, ik was je bijna vergeten."],["gps_back","p","Signaal terug. Doe maar alsof er niets is gebeurd."]];
+const COACH = { mem: Object.assign({ used: [], tones: [] }, loadJSON('lc.coachmem') || {}), voice: null, speaking: false, unlocked: false };
+function pickVoice() {
+  try {
+    const v = speechSynthesis.getVoices().filter(x => /^nl/i.test(x.lang));
+    COACH.voice = v.find(x => /nl[-_]NL/i.test(x.lang) && !/compact/i.test(x.name)) || v.find(x => /nl[-_]NL/i.test(x.lang)) || v[0] || null;
+  } catch (e) {}
+}
+if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function tempoCat(sp, t) {
+  if (sp == null || t <= 0) return null;
+  const r = sp / t;
+  if (r < 0.85) return 'far_below';
+  if (Math.round(sp * 10) / 10 < Math.round(t * 10) / 10) return 'below';
+  if (r < 1.05) return 'on';
+  if (r < 1.15) return 'above';
+  return 'far_above';
+}
+const nlNum = n => n.toFixed(1).replace('.', ',');
+function fillPhrase(t, c) {
+  const sec = Math.round(Math.abs(c.aheadS)), u = sec === 1 ? 'seconde' : 'seconden';
+  return t.replace(/\{naam\}/g, c.naam).replace(/\{snelheid\}/g, c.speed == null ? 'onbekend' : nlNum(c.speed))
+    .replace(/\{doel\}/g, nlNum(c.target)).replace(/\{resterend_km\}/g, nlNum(Math.max(0, c.remaining) / 1000))
+    .replace(/\{voorsprong\}/g, sec + ' ' + u + (c.aheadS >= 0 ? ' voor' : ' achter'));
+}
+function coachPick(cat, hasName) {
+  const tones = cat === 'far_below' ? ['m', 'u'] : ['h', 'u', 'm', 'p'];
+  let pool = PHR.filter(p => p[0] === cat && tones.includes(p[1]) && (hasName || p[2].indexOf('{naam}') < 0));
+  if (!pool.length) return null;
+  const t = COACH.mem.tones;
+  if (t.length >= 2 && t[t.length - 1] === t[t.length - 2]) {
+    const alt = pool.filter(p => p[1] !== t[t.length - 1]);
+    if (alt.length) pool = alt;
+  }
+  const key = p => p[0] + '|' + p[2];
+  const rank = p => COACH.mem.used.lastIndexOf(key(p));
+  const best = Math.min.apply(null, pool.map(rank));
+  const c = pool.filter(p => rank(p) === best);
+  const pick = c[Math.floor(Math.random() * c.length)];
+  COACH.mem.used = COACH.mem.used.filter(k => k !== key(pick)).concat(key(pick)).slice(-100);
+  COACH.mem.tones = t.concat(pick[1]).slice(-10);
+  saveJSON('lc.coachmem', COACH.mem);
+  return pick;
+}
+function speakText(text) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'nl-NL'; if (COACH.voice) u.voice = COACH.voice;
+    u.rate = S.rate || 1; u.volume = S.vol;
+    u.onend = u.onerror = () => { COACH.speaking = false; };
+    COACH.speaking = true;
+    speechSynthesis.speak(u);
+  } catch (e) { COACH.speaking = false; }
+}
+function coachSay(cat, force) {
+  if (S.mode === 'beep' || RUN.state === 'done' && !force) return;
+  if (COACH.speaking && !force) return;
+  const name = (S.name || '').trim();
+  const p = coachPick(cat, !!name); if (!p) return;
+  const el = elapsed(), sched = RUN.speedKmh / 3.6 * el / 1000;
+  const text = fillPhrase(p[2], { naam: name, speed: RUN.sp, target: RUN.speedKmh, remaining: RUN.target ? RUN.target - RUN.dist : 0,
+    aheadS: RUN.speedKmh > 0 ? (RUN.dist - sched) / (RUN.speedKmh / 3.6) : 0 });
+  RUN.lastCue = text; RUN.lastCueAt = el;
+  if (force && 'speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch (e) {} }
+  speakText(text);
+}
+function coachMilestones() {
+  if (!RUN.target || RUN.target <= 0) return;
+  const d = RUN.dist, T = RUN.target, rem = T - d, f = d / T, F = RUN.fired;
+  const list = [['p25', f >= .25 && T >= 2000, 'p25'], ['p50', f >= .5 && T >= 2000, 'p50'], ['p75', f >= .75 && T >= 2000, 'p75'],
+    ['km', rem <= 1000 && T >= 3000, 'last_km'], ['500', rem <= 500 && T >= 1500, 'last_500'], ['100', rem <= 100 && T >= 500, 'last_100']];
+  let cat = null;
+  for (const [k, hit, c] of list) if (hit && !F.has(k)) { F.add(k); cat = c; }
+  if (cat) coachSay(cat, true);
+}
+
 /* ---------- run-verloop ---------- */
 function startCountdown() {
   if (RUN.state !== 'ready') return;
@@ -642,6 +747,7 @@ function startCountdown() {
       RUN.state = 'running'; RUN.acc = 0; RUN.resumedAt = now();
       RUN.last = null; RUN.kf = null; RUN.hist = []; RUN.nextBeepAt = RUN.zMs;
       lockScreen(); render();
+      if (S.mode !== 'beep') setTimeout(() => coachSay('start', true), 700);
     }
   };
   step();
@@ -650,9 +756,11 @@ function pauseResume() {
   if (RUN.state === 'running') {
     RUN.acc += now() - RUN.resumedAt; RUN.resumedAt = null;
     RUN.state = 'paused'; RUN.last = null; RUN.kf = null; RUN.hist = []; saveSnap();
+    if (S.mode !== 'beep') coachSay('pause', true);
   } else if (RUN.state === 'paused') {
     RUN.resumedAt = now(); RUN.state = 'running'; RUN.last = null; RUN.kf = null; RUN.hist = [];
     lockScreen();
+    if (S.mode !== 'beep') coachSay('resume', true);
   }
   render();
 }
@@ -666,6 +774,8 @@ function finishRun(completed, atEl) {
   stopGPS(); unlockScreen(); delKey(KEY_RUN);
   $('#confirm').classList.remove('on');
   if (completed && S.melodyOn) { initAudio(); playMelody(S.melody); }
+  if (completed && S.mode !== 'beep') setTimeout(() => coachSay('finish', true), S.melodyOn ? 2600 : 300);
+  else { try { speechSynthesis.cancel(); } catch (e) {} }
   buildSummary(); show('summary');
 }
 
@@ -687,14 +797,23 @@ function tick() {
   if (RUN.state === 'running') {
     RUN.sp = smoothSpeed();
     const el = elapsed();
+    const stale0 = RUN.lastFixT == null || now() - RUN.lastFixT > STALE;
+    if (S.mode !== 'beep') {
+      if (!stale0 && RUN.sp != null && RUN.nogAnn) { RUN.nogAnn = false; coachSay('gps_back', true); }
+      else coachMilestones();
+    }
     if (el >= RUN.nextBeepAt) {
-      const stale = RUN.lastFixT == null || now() - RUN.lastFixT > STALE;
-      if (RUN.sp == null || stale) beepNoGps();
-      else if (onTarget(RUN.sp)) beepHigh();
-      else beepLow();
-      RUN.lastBeep = (RUN.sp == null || stale) ? 'geen GPS' : onTarget(RUN.sp) ? 'hoog' : 'laag';
+      const stale = stale0, nog = RUN.sp == null || stale;
+      if (S.mode !== 'speech') {
+        if (nog) beepNoGps(); else if (onTarget(RUN.sp)) beepHigh(); else beepLow();
+      }
+      if (S.mode !== 'beep') {
+        if (nog) { if (!RUN.nogAnn) { RUN.nogAnn = true; setTimeout(() => coachSay('nogps'), S.mode === 'both' ? 900 : 0); } }
+        else { const cat = tempoCat(RUN.sp, RUN.speedKmh); if (cat) setTimeout(() => coachSay(cat), S.mode === 'both' ? 900 : 0); }
+      }
+      RUN.lastBeep = nog ? 'geen GPS' : onTarget(RUN.sp) ? 'hoog' : 'laag';
       RUN.lastBeepAt = el;
-      while (RUN.nextBeepAt <= el) RUN.nextBeepAt += RUN.zMs;   // na achtergrond: één piep, geen inhaalrij
+      while (RUN.nextBeepAt <= el) RUN.nextBeepAt += RUN.zMs;   // na achtergrond: één cue, geen inhaalrij
     }
     if (!RUN.sim && RUN.lastFixT != null && now() - RUN.lastFixT > 25000 && now() - RUN.lastRestart > 25000) {
       RUN.lastRestart = now(); startGPS();
@@ -706,7 +825,7 @@ function tick() {
 
 /* ---------- route tekenen (eenvoudige lijn, geen kaartondergrond, geen internet nodig) ---------- */
 const COL = ['#6b7280', '#4ade80', '#ff6b6b'];
-function drawRoute(svg, track, marks, cur, endPos) {
+function drawRoute(svg, track, marks, cur, endPos, useTiles) {
   if (!svg) return false;
   if (!track || track.length < 2) { svg.innerHTML = ''; return false; }
   const cosL = Math.cos(track[0].lat * Math.PI / 180);
@@ -718,6 +837,8 @@ function drawRoute(svg, track, marks, cur, endPos) {
   const w = spanX * sc + 2 * pad, h = spanY * sc + 2 * pad + 30;
   const X = x => (x - minX) * sc + pad, Y = y => (y - minY) * sc + pad;
   const pos = ll => ({ x: X(ll.lon * cosL * 111320), y: Y(-ll.lat * 111320) });
+  let tilesSvg = '';
+  if (useTiles) tilesSvg = osmTiles((svgX) => (svgX - pad) / sc + minX, (svgY) => (svgY - pad) / sc + minY, cosL, w, h, X, Y);
   let out = '', d = '', col = null;
   for (let i = 1; i < P.length; i++) {
     if (P[i].brk) { if (d) out += `<path d="${d}" stroke="${COL[col]}"/>`; d = ''; col = null; continue; }
@@ -729,7 +850,8 @@ function drawRoute(svg, track, marks, cur, endPos) {
     d += `L${X(b.x).toFixed(1)} ${Y(b.y).toFixed(1)}`;
   }
   if (d) out += `<path d="${d}" stroke="${COL[col]}"/>`;
-  out = `<g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${out}</g>`;
+  out = (useTiles ? `<g fill="none" stroke="#000" stroke-opacity=".55" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">${out.replace(/ stroke="[^"]*"/g, '')}</g>` : '') +
+        `<g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${out}</g>`;
   const s0 = P[0];
   out += `<circle cx="${X(s0.x).toFixed(1)}" cy="${Y(s0.y).toFixed(1)}" r="13" fill="#fff" stroke="#000" stroke-width="3"/>`;
   (marks || []).forEach(m => {
@@ -752,8 +874,34 @@ function drawRoute(svg, track, marks, cur, endPos) {
          `<text x="${(bx + bl + 12).toFixed(1)}" y="${by + 8}" font-size="24" fill="#9aa4b2" font-family="-apple-system,sans-serif">${bar >= 1000 ? bar / 1000 + ' km' : bar + ' m'}</text>`;
   svg.setAttribute('viewBox', `0 0 ${w.toFixed(0)} ${h.toFixed(0)}`);
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.innerHTML = out;
+  if (useTiles) out += `<text x="${(w - 12).toFixed(0)}" y="${(h - 14).toFixed(0)}" font-size="22" text-anchor="end" fill="#fff" stroke="#000" stroke-width="4" paint-order="stroke" font-family="-apple-system,sans-serif">© OpenStreetMap-bijdragers</text>`;
+  svg.innerHTML = tilesSvg + out;
   return true;
+}
+
+/* OpenStreetMap-tegels onder de route (alleen in het eindoverzicht, alleen als de gebruiker het aanzet).
+   Tegels worden als <image> in de SVG geplaatst; lukt het laden niet (geen internet), dan blijft de effen route staan. */
+function osmTiles(invX, invY, cosL, w, h, X, Y) {
+  const lonOf = sx => invX(sx) / (cosL * 111320);
+  const latOf = sy => -invY(sy) / 111320;
+  const west = lonOf(0), east = lonOf(w), north = latOf(0), south = latOf(h);
+  const tx = (lon, z) => (lon + 180) / 360 * Math.pow(2, z);
+  const ty = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z); };
+  let z = 17;
+  for (; z > 10; z--) {
+    const nx = Math.floor(tx(east, z)) - Math.floor(tx(west, z)) + 1, ny = Math.floor(ty(south, z)) - Math.floor(ty(north, z)) + 1;
+    if (nx * ny <= 16) break;
+  }
+  const x0 = Math.floor(tx(west, z)), x1 = Math.floor(tx(east, z)), y0 = Math.floor(ty(north, z)), y1 = Math.floor(ty(south, z));
+  const lonT = (x) => x / Math.pow(2, z) * 360 - 180;
+  const latT = (y) => { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); };
+  let o = '<rect width="100%" height="100%" fill="#e8e6e0"/>'.replace('width="100%" height="100%"', `width="${w.toFixed(0)}" height="${h.toFixed(0)}"`);
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const a = { x: X(lonT(x) * cosL * 111320), y: Y(-latT(y) * 111320) };
+    const b = { x: X(lonT(x + 1) * cosL * 111320), y: Y(-latT(y + 1) * 111320) };
+    o += `<image href="https://tile.openstreetmap.org/${z}/${x}/${y}.png" x="${a.x.toFixed(2)}" y="${a.y.toFixed(2)}" width="${(b.x - a.x + 0.6).toFixed(2)}" height="${(b.y - a.y + 0.6).toFixed(2)}" preserveAspectRatio="none" onerror="this.remove()"/>`;
+  }
+  return o;
 }
 
 /* ---------- weergave ---------- */
@@ -823,8 +971,8 @@ function render() {
 
   $('#bar').style.width = clamp(dist / RUN.target * 100, 0, 100) + '%';
   setText('#beepLine', st === 'running'
-    ? `Volgend piepje over ${fmtTime(Math.max(0, RUN.nextBeepAt - el))}` + (RUN.lastBeep ? ` · laatste: ${RUN.lastBeep} (${fmtTime(RUN.lastBeepAt)})` : '')
-    : `Piepje elke ${fmtTrim(RUN.zMs / 60000, 2)} min · lage toon = te langzaam`);
+    ? `Volgende aanwijzing over ${fmtTime(Math.max(0, RUN.nextBeepAt - el))}` + (S.mode !== 'speech' && RUN.lastBeep ? ` · laatste piep: ${RUN.lastBeep} (${fmtTime(RUN.lastBeepAt)})` : '') + (S.mode !== 'beep' && RUN.lastCue ? ` · “${RUN.lastCue}”` : '')
+    : `${S.mode === 'speech' ? 'Aanwijzing' : 'Piepje'} elke ${fmtTrim(RUN.zMs / 60000, 2)} min` + (S.mode === 'speech' ? '' : ' · lage toon = te langzaam'));
 
   const mapView = RUN.view === 'map' && st !== 'ready' && st !== 'countdown';
   $('#mapBox').style.display = mapView ? 'flex' : 'none';
@@ -876,7 +1024,7 @@ function buildSummary() {
       `<div class="sp" style="color:${col}">${fmt(r.kmh, 1)} km/u<small>${fmtPace(r.pace)} min/km</small></div></div>`;
   }).join('') : '<div style="color:var(--mute);font-size:15px">Nog geen volle kilometer gelopen.</div>';
 
-  const hasRoute = drawRoute($('#routeSum'), RUN.track, RUN.splits, false, RUN.completed ? RUN.finishPos : null);
+  const hasRoute = drawRoute($('#routeSum'), RUN.track, RUN.splits, false, RUN.completed ? RUN.finishPos : null, !!S.map);
   $('#sumRouteCard').style.display = hasRoute ? '' : 'none';
   lastSummaryText = [
     `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}`,
@@ -902,6 +1050,23 @@ function buildPresets() {
       saveSettings(); refreshSetup();
     });
     box.appendChild(b);
+  });
+}
+function buildModeSeg() {
+  const m = $('#modeSeg'); m.innerHTML = '';
+  [['beep', 'Piepjes'], ['speech', 'Spraak'], ['both', 'Beide']].forEach(([k, t]) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (S.mode === k ? ' on' : ''); b.textContent = t;
+    b.addEventListener('click', () => {
+      const wasBeep = S.mode === 'beep'; S.mode = k;
+      if (k !== 'beep' && wasBeep && S.z === 1) S.z = 3;        // spraak vraagt een ruimer interval
+      if (k === 'beep' && S.z === 3) S.z = 1;
+      saveSettings(); buildModeSeg(); refreshSetup(); initAudio();
+      $('#modeNote').textContent = k === 'beep' ? '' : (('speechSynthesis' in window)
+        ? (COACH.voice ? `Stem: ${COACH.voice.name}. Interval gezet op ${S.z} min.` : 'Geen Nederlandse stem gevonden: de standaardstem wordt gebruikt. Download er een via Instellingen › Toegankelijkheid › Gesproken content › Stemmen › Nederlands.')
+        : 'Deze browser kan niet spreken.');
+    });
+    m.appendChild(b);
   });
 }
 function buildSegs() {
@@ -971,6 +1136,19 @@ function init() {
   $('#vol').addEventListener('input', e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol; saveSettings(); });
   $('#melodyOn').checked = S.melodyOn;
   $('#melodyOn').addEventListener('change', e => { S.melodyOn = e.target.checked; saveSettings(); });
+  buildModeSeg();
+  $('#coachName').value = S.name || '';
+  $('#coachName').addEventListener('input', e => { S.name = e.target.value.slice(0, 20); saveSettings(); });
+  $('#mapOn').checked = !!S.map;
+  $('#mapOn').addEventListener('change', e => { S.map = e.target.checked; saveSettings(); });
+  $('#mixOn').checked = S.mix !== false;
+  $('#mixOn').addEventListener('change', e => { S.mix = e.target.checked; saveSettings(); initAudio(); });
+  $('#tSay').addEventListener('click', () => {
+    initAudio();
+    const name = (S.name || '').trim();
+    speakText(name ? `Dit is je coach, ${name}. Op tempo, dat loopt als een trein.` : 'Dit is je coach. Op tempo, dat loopt als een trein.');
+    updateDiag();
+  });
   $('#tLow').addEventListener('click', () => { initAudio(); beepLow(); });
   $('#tHigh').addEventListener('click', () => { initAudio(); beepHigh(); });
 
