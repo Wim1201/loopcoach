@@ -125,6 +125,37 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
 .splits .t small{display:block;font-size:12px;color:var(--mute);font-weight:500}
 .splits .sp{text-align:right;font-size:16px;font-variant-numeric:tabular-nums}
 .splits .sp small{display:block;font-size:12px;color:var(--mute)}
+
+/* history */
+.hist-warn{border:1px solid #5a4a14;background:#221c08;color:#f5dd8a;border-radius:14px;padding:12px;font-size:14px;line-height:1.45;margin-bottom:12px}
+.hist-warn.stale{border-color:#7a2323;background:#2a0d0d;color:#ffb4b4}
+.hist-item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;min-height:62px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hist-item:active{background:#1a2029}
+.hist-date{font-size:13px;color:var(--mute);min-width:0}
+.hist-main{flex:1;min-width:0}
+.hist-main .hm-top{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-main .hm-bot{font-size:13px;color:var(--mute);margin-top:2px}
+.hist-arr{color:var(--mute);font-size:20px;flex:none}
+.hist-empty{color:var(--mute);font-size:15px;text-align:center;padding:32px 0;line-height:1.5}
+.hist-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.backup-fb{margin-top:10px}
+.backup-fb textarea{width:100%;height:140px;border-radius:12px;border:1.5px solid var(--line);background:#161b22;color:var(--fg);font-size:13px;padding:10px;font-family:monospace;-webkit-user-select:text;user-select:text;resize:vertical}
+
+/* stats */
+.stats-tot{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.stats-tot .stat{background:var(--card);border:1px solid var(--line)}
+.stats-seg{display:flex;gap:8px;margin-bottom:10px}
+.stats-seg .chip{flex:1;min-height:44px}
+.chart-svg{width:100%;border-radius:12px;background:#ffffff0a;overflow:visible}
+.chart-note{font-size:12px;color:var(--mute);margin-top:6px;line-height:1.4}
+.rec-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.rec-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;cursor:pointer;min-height:90px}
+.rec-card:active{background:#1a2029}
+.rec-card .rc-label{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);margin-bottom:4px}
+.rec-card .rc-val{font-size:24px;font-weight:700;color:var(--ok);font-variant-numeric:tabular-nums}
+.rec-card .rc-sub{font-size:13px;color:var(--mute);margin-top:2px}
+.rec-card.empty{cursor:default;opacity:.5}
+.rec-card.empty:active{background:var(--card)}
 </style>
 </head>
 <body>
@@ -225,7 +256,11 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
     <button class="btn sec small" id="btnSim" style="margin-top:0">Test zonder te lopen (simulatie)</button>
     <select id="simScale" aria-label="Simulatiesnelheid"><option value="1">1×</option><option value="10" selected>10×</option><option value="30">30×</option></select>
   </div>
-  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking. Alleen als je de kaartoptie aanzet, haalt de app kaartplaatjes op bij OpenStreetMap.<br>versie 7.1 · piep en stem apart</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+    <button class="btn sec small" id="btnHistory" style="margin-top:0">Geschiedenis</button>
+    <button class="btn sec small" id="btnStats" style="margin-top:0">Statistieken</button>
+  </div>
+  <div class="foot">Alles draait lokaal op je toestel. Geen account, geen tracking. Alleen als je de kaartoptie aanzet, haalt de app kaartplaatjes op bij OpenStreetMap.<br>versie 9 · geschiedenis en statistieken</div>
 </section>
 
 <!-- ============ RUN ============ -->
@@ -285,7 +320,66 @@ input[type=range]{width:100%;height:36px;accent-color:var(--accent)}
   </div>
   <div class="card splits"><h2>Kilometertijden</h2><div id="sumRows"></div></div>
   <button class="btn sec small" id="btnCopy">Kopieer samenvatting</button>
+  <div id="sumHistBtns" style="display:none">
+    <button class="btn danger small" id="btnHistDel" style="margin-top:8px">Verwijder deze run</button>
+    <button class="btn sec" id="btnHistBack2" style="margin-top:8px">Terug naar geschiedenis</button>
+  </div>
   <button class="btn primary" id="btnAgain">Nieuwe run</button>
+</section>
+
+<!-- ============ GESCHIEDENIS ============ -->
+<section id="history" class="screen">
+  <h1>Geschiedenis</h1>
+  <p class="sub" id="histSub">Je opgeslagen runs.</p>
+  <div id="histWarn" class="hist-warn">
+    <div id="histBackupAge" style="font-weight:700;margin-bottom:6px"></div>
+    Safari kan lokale gegevens wissen als je de site langer dan ongeveer een week niet bezoekt. Maak daarom regelmatig een back-up. Zet de app ook op je beginscherm: Deel › Zet op beginscherm.
+  </div>
+  <div id="histList"></div>
+  <div class="hist-buttons">
+    <button class="btn sec small" id="btnBackupMake" style="margin-top:0">Back-up maken</button>
+    <button class="btn sec small" id="btnBackupRestore" style="margin-top:0">Terugzetten</button>
+  </div>
+  <input type="file" id="backupFile" accept=".json" style="display:none">
+  <div id="backupFb" class="backup-fb" style="display:none">
+    <p style="font-size:14px;color:var(--mute);margin:0 0 6px">Kopieer de back-up hieronder en bewaar hem zelf:</p>
+    <textarea id="backupText" readonly></textarea>
+    <button class="btn sec small" id="btnBackupCopy" style="margin-top:6px">Kopieer</button>
+  </div>
+  <div id="restoreMsg" class="notice" style="display:none;margin-top:10px"></div>
+  <button class="btn sec" id="btnHistHome" style="margin-top:12px">Terug</button>
+  <button class="btn sec small" id="btnHistToStats" style="margin-top:8px">Statistieken</button>
+</section>
+
+<!-- ============ STATISTIEKEN ============ -->
+<section id="stats" class="screen">
+  <h1>Statistieken</h1>
+  <p class="sub" id="statsSub"></p>
+  <div class="stats-tot" id="statsTot"></div>
+  <div id="statsEmpty" class="hist-empty" style="display:none">Te weinig runs (minder dan 2) om statistieken te tonen. Ga lopen en kom terug.</div>
+  <div id="statsCharts">
+    <div class="card">
+      <h2>Kilometers</h2>
+      <div class="stats-seg" id="periodSeg"></div>
+      <svg id="chartBar" class="chart-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="chartBarInfo" class="chart-note"></div>
+    </div>
+    <div class="card">
+      <h2>Gemiddelde snelheid</h2>
+      <svg id="chartSpeed" class="chart-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="chart-note">Alleen afgeronde runs van minstens 1 km.</div>
+    </div>
+    <div class="card">
+      <h2>Snelste kilometer en langste run</h2>
+      <div class="rec-cards" id="statsRecords"></div>
+    </div>
+    <div class="card">
+      <h2>Verdeling over weekdagen</h2>
+      <svg id="chartDays" class="chart-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+  <button class="btn sec" id="btnStatsHome" style="margin-top:12px">Terug</button>
+  <button class="btn sec small" id="btnStatsToHist" style="margin-top:8px">Geschiedenis</button>
 </section>
 
 <!-- overlays -->
@@ -324,7 +418,7 @@ function fmtPace(secPerKm) {
   return `${Math.floor(s / 60)}:${pad(s % 60)}`;
 }
 function loadJSON(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
-function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 function delKey(k) { try { localStorage.removeItem(k); } catch (e) {} }
 function haversine(a, b) {
   const r = 6371000, t = Math.PI / 180;
@@ -786,7 +880,9 @@ function finishRun(completed, atEl) {
   if (completed && S.melodyOn) { try { speechSynthesis.cancel(); } catch (e) {} COACH.speaking = false; initAudio(); playMelody(S.melody); }
   if (completed && S.mode !== 'beep') setTimeout(() => coachSay('finish', true), 300);
   else { try { speechSynthesis.cancel(); } catch (e) {} }
+  viewingHistory = null;
   buildSummary(); show('summary');
+  saveRunToHistory();
 }
 
 /* herstel na onverwacht herladen van de pagina */
@@ -1006,47 +1102,22 @@ function render() {
 /* ---------- samenvatting ---------- */
 let lastSummaryText = '';
 function buildSummary() {
-  const dist = RUN.completed ? RUN.target : RUN.dist;
-  const tot = Math.max(1, RUN.finalEl);
-  const rows = [];
-  let prevAt = 0, prevD = 0;
-  RUN.splits.forEach(s => { rows.push({ label: s.km + ' km', d: 1000, ms: s.at - prevAt, cum: s.at }); prevAt = s.at; prevD = s.km * 1000; });
-  const rest = dist - prevD;
-  if (rest > 25 && tot - prevAt > 0) rows.push({ label: '+' + fmt(rest / 1000, 2), d: rest, ms: tot - prevAt, cum: tot, partial: true });
-  rows.forEach(r => { r.kmh = r.d / r.ms * 3600; r.pace = r.ms / 1000 / (r.d / 1000); });
-  const maxKmh = Math.max(RUN.speedKmh, ...rows.map(r => r.kmh), 1);
-
-  const avgKmh = dist / (tot / 1000) * 3.6;
-  const sched = dist / (RUN.speedKmh / 3.6) * 1000;
-  const diff = sched - tot;
-  const schedTxt = Math.abs(diff) < 1000 ? 'op schema' : `${fmtDelta(diff)} (${diff >= 0 ? 'voor' : 'achter'})`;
-
-  $('#sumTitle').textContent = RUN.completed ? 'Afstand gehaald' : 'Run beëindigd';
-  $('#sumSub').textContent = `${fmtTrim(dist / 1000, 2)} km${RUN.completed ? '' : ' van ' + fmtTrim(RUN.target / 1000, 2) + ' km'} · doel ${fmt(RUN.speedKmh, 1)} km/u`;
-  const stat = (k, v, s, c) => `<div class="stat"><div class="k">${k}</div><div class="v ${c || ''}">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
-  $('#sumTot').innerHTML =
-    stat('Tijd', fmtTime(tot), 'schema ' + fmtTime(sched)) +
-    stat('Gem. snelheid', fmt(avgKmh, 1), 'km/u') +
-    stat('Gem. tempo', fmtPace(3600 / avgKmh), 'min/km') +
-    stat('Ten opzichte van schema', Math.abs(diff) < 1000 ? '0:00' : fmtDelta(diff), diff >= 0 ? 'voor op schema' : 'achter op schema', diff >= 0 ? 'ok' : 'bad');
-
-  $('#sumRows').innerHTML = rows.length ? rows.map(r => {
-    const good = Math.round(r.kmh * 10) >= Math.round(RUN.speedKmh * 10);
-    const col = good ? 'var(--ok)' : 'var(--bad)';
-    return `<div class="r"><div class="fill" style="width:${(r.kmh / maxKmh * 100).toFixed(1)}%;background:${col}"></div>` +
-      `<div class="km">${r.label}</div>` +
-      `<div class="t">${fmtTime(r.ms)}<small>totaal ${fmtTime(r.cum)}</small></div>` +
-      `<div class="sp" style="color:${col}">${fmt(r.kmh, 1)} km/u<small>${fmtPace(r.pace)} min/km</small></div></div>`;
-  }).join('') : '<div style="color:var(--mute);font-size:15px">Nog geen volle kilometer gelopen.</div>';
-
-  const hasRoute = drawRoute($('#routeSum'), RUN.track, RUN.splits, false, RUN.completed ? RUN.finishPos : null, !!S.map);
-  $('#sumRouteCard').style.display = hasRoute ? '' : 'none';
-  SUMDATA = { dist, tot, avgKmh, schedTxt, rows };
-  const hasT = !!RUN.wallStart;
-  $('#sumTimes').innerHTML = hasT ? whenText(RUN.wallStart, RUN.wallEnd) : '';
-  $('#sumTimes').style.display = hasT ? '' : 'none';
-  $('#placeIn').value = S.place || '';
-  lastSummaryText = summaryText();
+  $('#sumHistBtns').style.display = 'none';
+  $('#btnAgain').style.display = '';
+  renderSummaryFrom({
+    dist: RUN.completed ? RUN.target : RUN.dist,
+    time: RUN.finalEl,
+    splits: RUN.splits,
+    targetSpeed: RUN.speedKmh,
+    targetDist: RUN.target,
+    completed: RUN.completed,
+    track: RUN.track,
+    wallStart: RUN.wallStart,
+    wallEnd: RUN.wallEnd,
+    place: S.place || '',
+    finishPos: RUN.completed ? RUN.finishPos : null,
+    avgSpeed: null
+  });
 }
 
 /* tijden en samenvattingstekst */
@@ -1058,15 +1129,482 @@ function whenText(a, b) {
 }
 function summaryText() {
   if (!SUMDATA) return '';
-  const { dist, tot, avgKmh, schedTxt, rows } = SUMDATA;
-  const place = ($('#placeIn') ? $('#placeIn').value : S.place || '').trim();
-  const when = RUN.wallStart ? `${dayTxt(RUN.wallStart)}, ${hm(RUN.wallStart)}–${RUN.wallEnd ? hm(RUN.wallEnd) : '?'}` : '';
+  const d = Object.assign({}, SUMDATA);
+  d.place = ($('#placeIn') ? $('#placeIn').value : d.place || '').trim();
+  return summaryTextFrom(d);
+}
+
+/* ---------- geschiedenis ---------- */
+const KEY_HIST = 'loopcoach.history.v1';
+let viewingHistory = null;
+
+function loadHistory() { return loadJSON(KEY_HIST) || { v: 1, runs: [], lastBackup: null }; }
+function saveHistorySafe(h) {
+  try { localStorage.setItem(KEY_HIST, JSON.stringify(h)); return true; }
+  catch (e) { showStorageMsg('Opslaan lukt niet: maak een back-up en verwijder oude runs.'); return false; }
+}
+let storageToast = null;
+function showStorageMsg(msg) {
+  if (storageToast) clearTimeout(storageToast);
+  const el = $('#restoreMsg'); if (!el) return;
+  el.textContent = msg; el.style.display = 'block';
+  storageToast = setTimeout(() => { el.style.display = 'none'; }, 8000);
+}
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function thinTrack(track, maxPts) {
+  if (!track || track.length <= maxPts) return track ? track.slice() : [];
+  const result = [track[0]];
+  const step = (track.length - 1) / (maxPts - 1);
+  for (let i = 1; i < maxPts - 1; i++) result.push(track[Math.round(i * step)]);
+  result.push(track[track.length - 1]);
+  return result;
+}
+
+function saveRunToHistory() {
+  if (RUN.sim) return;
+  const dist = RUN.completed ? RUN.target : RUN.dist;
+  const time = Math.max(1, RUN.finalEl);
+  const h = loadHistory();
+  h.runs.push({
+    id: genId(), wallStart: RUN.wallStart, wallEnd: RUN.wallEnd,
+    place: (S.place || '').trim(), dist, time,
+    avgSpeed: dist / (time / 1000) * 3.6,
+    targetSpeed: RUN.speedKmh, targetDist: RUN.target, completed: RUN.completed,
+    splits: RUN.splits.map(s => ({ km: s.km, at: s.at, pos: s.pos ? { lat: s.pos.lat, lon: s.pos.lon } : null })),
+    track: thinTrack(RUN.track, 300),
+    finishPos: RUN.finishPos ? { lat: RUN.finishPos.lat, lon: RUN.finishPos.lon } : null
+  });
+  saveHistorySafe(h);
+}
+
+function showHistory() {
+  const h = loadHistory();
+  const runs = h.runs.slice().sort((a, b) => (b.wallStart || 0) - (a.wallStart || 0));
+  const sub = $('#histSub');
+  sub.textContent = runs.length === 0 ? 'Nog geen opgeslagen runs.' : runs.length + (runs.length === 1 ? ' run' : ' runs');
+  const list = $('#histList'); list.innerHTML = '';
+  if (runs.length === 0) {
+    list.innerHTML = '<div class="hist-empty">Na je eerste run verschijnt die hier.</div>';
+  } else {
+    runs.forEach(r => {
+      const el = document.createElement('div'); el.className = 'hist-item';
+      const d = r.wallStart ? new Date(r.wallStart) : null;
+      const dateStr = d ? d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'Europe/Amsterdam' }) : '?';
+      const timeStr = d ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam' }) : '';
+      const pace = r.avgSpeed > 0 ? fmtPace(3600 / r.avgSpeed) : '–:–';
+      el.innerHTML = `<div class="hist-date">${dateStr}<br><span style="font-size:11px">${timeStr}</span></div>` +
+        `<div class="hist-main"><div class="hm-top">${fmtTrim(r.dist / 1000, 2)} km · ${fmtTime(r.time)}${r.place ? ' · ' + r.place : ''}</div>` +
+        `<div class="hm-bot">${fmt(r.avgSpeed, 1)} km/u · ${pace} min/km${r.completed ? '' : ' · niet afgerond'}</div></div>` +
+        `<div class="hist-arr">›</div>`;
+      el.addEventListener('click', () => openHistoryDetail(r.id));
+      list.appendChild(el);
+    });
+  }
+  updateBackupAge(h);
+  show('history');
+}
+
+function updateBackupAge(h) {
+  const el = $('#histBackupAge');
+  const warn = $('#histWarn');
+  if (!h.lastBackup) {
+    el.textContent = 'Nog geen back-up gemaakt';
+    warn.classList.add('stale');
+  } else {
+    const days = Math.floor((Date.now() - h.lastBackup) / 86400000);
+    el.textContent = days === 0 ? 'Laatste back-up: vandaag' : `Laatste back-up: ${days} ${days === 1 ? 'dag' : 'dagen'} geleden`;
+    warn.classList.toggle('stale', days > 14);
+  }
+}
+
+function openHistoryDetail(id) {
+  const h = loadHistory();
+  const r = h.runs.find(x => x.id === id);
+  if (!r) return;
+  viewingHistory = r;
+  renderSummaryFrom(r);
+  $('#sumHistBtns').style.display = 'block';
+  $('#btnAgain').style.display = 'none';
+  show('summary');
+}
+
+function deleteHistoryRun(id) {
+  if (!confirm('Weet je zeker dat je deze run wilt verwijderen? Dit kan niet ongedaan worden.')) return;
+  const h = loadHistory();
+  h.runs = h.runs.filter(x => x.id !== id);
+  saveHistorySafe(h);
+  viewingHistory = null;
+  showHistory();
+}
+
+function renderSummaryFrom(r) {
+  const dist = r.dist;
+  const tot = Math.max(1, r.time);
+  const rows = [];
+  let prevAt = 0;
+  (r.splits || []).forEach(s => { rows.push({ label: s.km + ' km', d: 1000, ms: s.at - prevAt, cum: s.at }); prevAt = s.at; });
+  const prevD = (r.splits || []).length * 1000;
+  const rest = dist - prevD;
+  if (rest > 25 && tot - prevAt > 0) rows.push({ label: '+' + fmt(rest / 1000, 2), d: rest, ms: tot - prevAt, cum: tot, partial: true });
+  rows.forEach(row => { row.kmh = row.d / row.ms * 3600; row.pace = row.ms / 1000 / (row.d / 1000); });
+  const maxKmh = Math.max(r.targetSpeed || 1, ...rows.map(x => x.kmh), 1);
+  const avgKmh = r.avgSpeed || (dist / (tot / 1000) * 3.6);
+  const sched = dist / ((r.targetSpeed || 10) / 3.6) * 1000;
+  const diff = sched - tot;
+  const schedTxt = Math.abs(diff) < 1000 ? 'op schema' : `${fmtDelta(diff)} (${diff >= 0 ? 'voor' : 'achter'})`;
+
+  $('#sumTitle').textContent = r.completed ? 'Afstand gehaald' : 'Run beëindigd';
+  $('#sumSub').textContent = `${fmtTrim(dist / 1000, 2)} km${r.completed ? '' : ' van ' + fmtTrim((r.targetDist || dist) / 1000, 2) + ' km'} · doel ${fmt(r.targetSpeed || 0, 1)} km/u`;
+  const stat = (k, v, s, c) => `<div class="stat"><div class="k">${k}</div><div class="v ${c || ''}">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
+  $('#sumTot').innerHTML =
+    stat('Tijd', fmtTime(tot), 'schema ' + fmtTime(sched)) +
+    stat('Gem. snelheid', fmt(avgKmh, 1), 'km/u') +
+    stat('Gem. tempo', fmtPace(3600 / avgKmh), 'min/km') +
+    stat('Ten opzichte van schema', Math.abs(diff) < 1000 ? '0:00' : fmtDelta(diff), diff >= 0 ? 'voor op schema' : 'achter op schema', diff >= 0 ? 'ok' : 'bad');
+
+  $('#sumRows').innerHTML = rows.length ? rows.map(row => {
+    const good = Math.round(row.kmh * 10) >= Math.round((r.targetSpeed || 0) * 10);
+    const col = good ? 'var(--ok)' : 'var(--bad)';
+    return `<div class="r"><div class="fill" style="width:${(row.kmh / maxKmh * 100).toFixed(1)}%;background:${col}"></div>` +
+      `<div class="km">${row.label}</div>` +
+      `<div class="t">${fmtTime(row.ms)}<small>totaal ${fmtTime(row.cum)}</small></div>` +
+      `<div class="sp" style="color:${col}">${fmt(row.kmh, 1)} km/u<small>${fmtPace(row.pace)} min/km</small></div></div>`;
+  }).join('') : '<div style="color:var(--mute);font-size:15px">Nog geen volle kilometer gelopen.</div>';
+
+  const marks = (r.splits || []).filter(s => s.pos).map(s => ({ km: s.km, pos: s.pos }));
+  const hasRoute = drawRoute($('#routeSum'), r.track || [], marks, false, r.finishPos, !!S.map);
+  $('#sumRouteCard').style.display = hasRoute ? '' : 'none';
+
+  const hasT = !!r.wallStart;
+  $('#sumTimes').innerHTML = hasT ? whenText(r.wallStart, r.wallEnd) : '';
+  $('#sumTimes').style.display = hasT ? '' : 'none';
+  $('#placeIn').value = r.place || '';
+  SUMDATA = { dist, tot, avgKmh, schedTxt, rows, targetSpeed: r.targetSpeed || 0, wallStart: r.wallStart, wallEnd: r.wallEnd, place: r.place };
+  lastSummaryText = summaryTextFrom(SUMDATA);
+}
+
+function summaryTextFrom(d) {
+  if (!d) return '';
+  const { dist, tot, avgKmh, schedTxt, rows, targetSpeed, wallStart, wallEnd, place } = d;
+  const p = (place || '').trim();
+  const when = wallStart ? `${dayTxt(wallStart)}, ${hm(wallStart)}–${wallEnd ? hm(wallEnd) : '?'}` : '';
   return [
-    `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}` + (place ? ` · ${place}` : ''),
+    `LoopCoach: ${fmtTrim(dist / 1000, 2)} km in ${fmtTime(tot)}` + (p ? ` · ${p}` : ''),
     ...(when ? [when] : []),
-    `Gemiddeld ${fmt(avgKmh, 1)} km/u (${fmtPace(3600 / avgKmh)} min/km), doel ${fmt(RUN.speedKmh, 1)} km/u, ${schedTxt}`,
+    `Gemiddeld ${fmt(avgKmh, 1)} km/u (${fmtPace(3600 / avgKmh)} min/km), doel ${fmt(targetSpeed, 1)} km/u, ${schedTxt}`,
     ...rows.map(r => `${r.label}: ${fmtTime(r.ms)} (${fmt(r.kmh, 1)} km/u)`)
   ].join('\n');
+}
+
+/* ---------- back-up en terugzetten ---------- */
+function makeBackup() {
+  const h = loadHistory();
+  const data = { app: 'loopcoach', v: 1, date: new Date().toISOString().slice(0, 10), settings: S, history: h };
+  const json = JSON.stringify(data, null, 2);
+  const name = 'loopcoach-backup-' + data.date + '.json';
+  h.lastBackup = Date.now();
+  saveHistorySafe(h);
+  updateBackupAge(h);
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  } catch (e) {
+    const fb = $('#backupFb'); fb.style.display = 'block';
+    $('#backupText').value = json;
+  }
+}
+
+function restoreBackup(file) {
+  const msg = $('#restoreMsg');
+  const showMsg = (t, bad) => { msg.textContent = t; msg.className = 'notice' + (bad ? ' bad' : ''); msg.style.display = 'block'; };
+  if (!file) { showMsg('Geen bestand gekozen.', true); return; }
+  const reader = new FileReader();
+  reader.onerror = () => showMsg('Kan het bestand niet lezen.', true);
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); } catch (e) { showMsg('Dit is geen geldig JSON-bestand.', true); return; }
+    if (!data || data.app !== 'loopcoach') { showMsg('Dit is geen LoopCoach-back-up.', true); return; }
+    if (data.v !== 1) { showMsg('Onbekende versie (' + data.v + '). Gebruik een nieuwere versie van LoopCoach.', true); return; }
+    if (!data.history || !Array.isArray(data.history.runs)) { showMsg('Het bestand bevat geen geschiedenisgegevens.', true); return; }
+    const incoming = data.history.runs.filter(r => r && r.id);
+    if (incoming.length === 0) { showMsg('Het bestand bevat geen runs.', true); return; }
+    const h = loadHistory();
+    const existing = new Set(h.runs.map(r => r.id));
+    let added = 0, skipped = 0;
+    incoming.forEach(r => {
+      if (existing.has(r.id)) { skipped++; }
+      else { h.runs.push(r); existing.add(r.id); added++; }
+    });
+    const txt = `Het bestand bevat ${incoming.length} run${incoming.length === 1 ? '' : 's'}. ${added} nieuw toegevoegd, ${skipped} al aanwezig.`;
+    if (added === 0) { showMsg(txt, false); return; }
+    if (!confirm(txt + ' Doorgaan met terugzetten?')) return;
+    if (data.history.lastBackup && (!h.lastBackup || data.history.lastBackup > h.lastBackup)) h.lastBackup = data.history.lastBackup;
+    if (!saveHistorySafe(h)) return;
+    if (data.settings) {
+      Object.keys(data.settings).forEach(k => { if (k !== 'place') S[k] = data.settings[k]; });
+      saveSettings();
+    }
+    showMsg(`${added} run${added === 1 ? '' : 's'} toegevoegd.`, false);
+    showHistory();
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- statistieken ---------- */
+let statsPeriod = 'week';
+
+function nlDate(ts) {
+  const s = new Date(ts).toLocaleDateString('en-CA', { timeZone: 'Europe/Amsterdam' });
+  const [y, m, d] = s.split('-').map(Number);
+  return { y, m, d };
+}
+function weekKey(ts) {
+  const { y, m, d } = nlDate(ts);
+  const dt = new Date(y, m - 1, d, 12);
+  const dow = dt.getDay();
+  dt.setDate(dt.getDate() - ((dow + 6) % 7));
+  return dt.toISOString().slice(0, 10);
+}
+function monthKey(ts) {
+  const { y, m } = nlDate(ts);
+  return y + '-' + String(m).padStart(2, '0');
+}
+function last12Weeks() {
+  const now = weekKey(Date.now());
+  const d = new Date(now + 'T12:00:00');
+  const result = [];
+  for (let i = 11; i >= 0; i--) {
+    const w = new Date(d); w.setDate(d.getDate() - 7 * i);
+    result.push(w.toISOString().slice(0, 10));
+  }
+  return result;
+}
+function last12Months() {
+  const { y, m } = nlDate(Date.now());
+  const result = [];
+  for (let i = 11; i >= 0; i--) {
+    let mm = m - i, yy = y;
+    while (mm <= 0) { mm += 12; yy--; }
+    result.push(yy + '-' + String(mm).padStart(2, '0'));
+  }
+  return result;
+}
+function weekLabel(key) {
+  const d = new Date(key + 'T12:00:00');
+  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+}
+function monthLabel(key) {
+  const [y, m] = key.split('-');
+  const d = new Date(+y, +m - 1, 15);
+  return d.toLocaleDateString('nl-NL', { month: 'short' }) + ' ' + y.slice(2);
+}
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const exp = Math.pow(10, Math.floor(Math.log10(v)));
+  const f = v / exp;
+  if (f <= 1) return exp;
+  if (f <= 2) return 2 * exp;
+  if (f <= 5) return 5 * exp;
+  return 10 * exp;
+}
+
+function drawBarChart(svg, periods, data, labelFn) {
+  const W = 700, H = 320, pL = 48, pR = 16, pT = 28, pB = 60;
+  const cW = W - pL - pR, cH = H - pT - pB;
+  const n = periods.length;
+  const barW = Math.min(38, cW / n * 0.65);
+  const gap = (cW - barW * n) / (n + 1);
+  const vals = periods.map(p => (data[p] || {}).km || 0);
+  const mx = niceMax(Math.max(...vals, 0.1));
+  let o = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = mx / 4 * i, y = pT + cH - (v / mx * cH);
+    o += `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W - pR}" y2="${y.toFixed(1)}" stroke="#222a33" stroke-width="1"/>`;
+    o += `<text x="${pL - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">${v < 10 ? fmt(v, 1) : Math.round(v)}</text>`;
+  }
+  periods.forEach((p, i) => {
+    const v = vals[i], d = data[p] || {};
+    const x = pL + gap + i * (barW + gap), h = Math.max(0, v / mx * cH);
+    const y = pT + cH - h;
+    if (v > 0) {
+      o += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(2, h).toFixed(1)}" rx="4" fill="#38bdf8"/>`;
+      o += `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle" fill="#f2f4f7" font-size="10" font-weight="600" font-family="-apple-system,sans-serif">${fmt(v, 1)}</text>`;
+    }
+    o += `<text x="${(x + barW / 2).toFixed(1)}" y="${(pT + cH + 14).toFixed(1)}" text-anchor="middle" fill="#97a2b0" font-size="10" font-family="-apple-system,sans-serif">${labelFn(p)}</text>`;
+    if (d.runs) o += `<text x="${(x + barW / 2).toFixed(1)}" y="${(pT + cH + 28).toFixed(1)}" text-anchor="middle" fill="#97a2b0" font-size="9" font-family="-apple-system,sans-serif">${d.runs}× · ${fmtTime(d.time || 0)}</text>`;
+  });
+  o += `<text x="${pL - 6}" y="${pT - 8}" text-anchor="end" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">km</text>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = o;
+}
+
+function drawSpeedChart(svg, runs) {
+  const W = 700, H = 300, pL = 50, pR = 56, pT = 28, pB = 50;
+  const cW = W - pL - pR, cH = H - pT - pB;
+  if (runs.length < 2) {
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="#97a2b0" font-size="15" font-family="-apple-system,sans-serif">Te weinig afgeronde runs voor deze grafiek.</text>`;
+    return;
+  }
+  const speeds = runs.map(r => r.avgSpeed);
+  const mn = Math.floor(Math.min(...speeds) * 2) / 2;
+  const mx = Math.ceil(Math.max(...speeds) * 2) / 2;
+  const range = Math.max(mx - mn, 0.5);
+  let o = '';
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const v = mn + (range / steps) * i, y = pT + cH - (i / steps * cH);
+    o += `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W - pR}" y2="${y.toFixed(1)}" stroke="#222a33" stroke-width="1"/>`;
+    o += `<text x="${pL - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">${fmt(v, 1)}</text>`;
+    if (v > 0.5) o += `<text x="${W - pR + 6}" y="${(y + 4).toFixed(1)}" text-anchor="start" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">${fmtPace(3600 / v)}</text>`;
+  }
+  const pts = runs.map((r, i) => ({
+    x: pL + (runs.length === 1 ? cW / 2 : i / (runs.length - 1) * cW),
+    y: pT + cH - ((r.avgSpeed - mn) / range * cH)
+  }));
+  o += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('')}" fill="none" stroke="#38bdf8" stroke-width="2.5"/>`;
+  pts.forEach((p, i) => {
+    const good = runs[i].avgSpeed >= runs[i].targetSpeed;
+    o += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="${good ? '#4ade80' : '#ff6b6b'}" stroke="#0f1318" stroke-width="2"/>`;
+  });
+  const labelStep = Math.max(1, Math.ceil(runs.length / 7));
+  runs.forEach((r, i) => {
+    if (i % labelStep === 0 || i === runs.length - 1) {
+      const x = pts[i].x;
+      const d = new Date(r.wallStart);
+      const lbl = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'Europe/Amsterdam' });
+      o += `<text x="${x.toFixed(1)}" y="${(pT + cH + 16).toFixed(1)}" text-anchor="middle" fill="#97a2b0" font-size="10" font-family="-apple-system,sans-serif">${lbl}</text>`;
+    }
+  });
+  o += `<text x="${pL - 6}" y="${pT - 8}" text-anchor="end" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">km/u</text>`;
+  o += `<text x="${W - pR + 6}" y="${pT - 8}" text-anchor="start" fill="#97a2b0" font-size="11" font-family="-apple-system,sans-serif">min/km</text>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = o;
+}
+
+function drawDaysChart(svg, dayData) {
+  const W = 500, H = 200, pL = 10, pR = 10, pT = 20, pB = 30;
+  const cW = W - pL - pR, cH = H - pT - pB;
+  const names = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+  const vals = names.map((_, i) => dayData[i] || 0);
+  const mx = niceMax(Math.max(...vals, 0.1));
+  const barW = Math.min(44, cW / 7 * 0.65);
+  const gap = (cW - barW * 7) / 8;
+  let o = '';
+  names.forEach((n, i) => {
+    const v = vals[i];
+    const x = pL + gap + i * (barW + gap), h = Math.max(0, v / mx * cH);
+    const y = pT + cH - h;
+    if (v > 0) {
+      o += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(2, h).toFixed(1)}" rx="4" fill="#38bdf8"/>`;
+      o += `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" fill="#f2f4f7" font-size="11" font-weight="600" font-family="-apple-system,sans-serif">${v < 10 ? fmt(v, 1) : Math.round(v)}</text>`;
+    }
+    o += `<text x="${(x + barW / 2).toFixed(1)}" y="${(pT + cH + 16).toFixed(1)}" text-anchor="middle" fill="#97a2b0" font-size="12" font-weight="600" font-family="-apple-system,sans-serif">${n}</text>`;
+  });
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = o;
+}
+
+function showStats() {
+  const h = loadHistory();
+  const runs = h.runs.slice().sort((a, b) => (a.wallStart || 0) - (b.wallStart || 0));
+  const hasData = runs.length >= 2;
+  $('#statsEmpty').style.display = hasData ? 'none' : 'block';
+  $('#statsCharts').style.display = hasData ? '' : 'none';
+  if (!hasData && runs.length > 0) {
+    $('#statsEmpty').textContent = 'Nog maar 1 run opgeslagen. Na de tweede run verschijnen hier statistieken.';
+  }
+  const totKm = runs.reduce((s, r) => s + r.dist / 1000, 0);
+  const totTime = runs.reduce((s, r) => s + r.time, 0);
+  const avgPace = totKm > 0 ? fmtPace(totTime / 1000 / totKm) : '–:–';
+  const avgSpeed = totKm > 0 ? fmt(totKm / (totTime / 3600000), 1) : '–';
+  const stat = (k, v, s) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
+  $('#statsTot').innerHTML = stat('Totale afstand', fmt(totKm, 1), 'km') + stat('Aantal runs', runs.length, '') + stat('Totale tijd', fmtTime(totTime), '') + stat('Gem. tempo', avgPace, `min/km · ${avgSpeed} km/u`);
+  $('#statsSub').textContent = runs.length + (runs.length === 1 ? ' run' : ' runs');
+
+  if (!hasData) { show('stats'); return; }
+
+  buildPeriodSeg();
+  renderPeriodChart(runs);
+  const speedRuns = runs.filter(r => r.completed && r.dist >= 1000);
+  drawSpeedChart($('#chartSpeed'), speedRuns);
+
+  let fastestKm = null, longestRun = null;
+  runs.forEach(r => {
+    if (r.dist > (longestRun ? longestRun.dist : 0)) longestRun = r;
+    (r.splits || []).forEach((s, i) => {
+      const prevAt = i === 0 ? 0 : r.splits[i - 1].at;
+      const splitTime = s.at - prevAt;
+      if (!fastestKm || splitTime < fastestKm.time) fastestKm = { time: splitTime, km: s.km, runId: r.id, place: r.place, wallStart: r.wallStart };
+    });
+  });
+  const rec = $('#statsRecords');
+  const rDate = ts => ts ? new Date(ts).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'Europe/Amsterdam' }) : '?';
+  let recHtml = '';
+  if (fastestKm) {
+    recHtml += `<div class="rec-card" data-rid="${fastestKm.runId}"><div class="rc-label">Snelste kilometer</div>` +
+      `<div class="rc-val">${fmtTime(fastestKm.time)}</div>` +
+      `<div class="rc-sub">km ${fastestKm.km} · ${rDate(fastestKm.wallStart)}${fastestKm.place ? ' · ' + fastestKm.place : ''}</div></div>`;
+  } else { recHtml += `<div class="rec-card empty"><div class="rc-label">Snelste kilometer</div><div class="rc-sub">Nog geen splits</div></div>`; }
+  if (longestRun) {
+    recHtml += `<div class="rec-card" data-rid="${longestRun.id}"><div class="rc-label">Langste run</div>` +
+      `<div class="rc-val">${fmtTrim(longestRun.dist / 1000, 2)} km</div>` +
+      `<div class="rc-sub">${rDate(longestRun.wallStart)}${longestRun.place ? ' · ' + longestRun.place : ''}</div></div>`;
+  } else { recHtml += `<div class="rec-card empty"><div class="rc-label">Langste run</div><div class="rc-sub">Nog geen runs</div></div>`; }
+  rec.innerHTML = recHtml;
+  rec.querySelectorAll('.rec-card[data-rid]').forEach(c => {
+    c.addEventListener('click', () => openHistoryDetail(c.dataset.rid));
+  });
+
+  const dayData = {};
+  runs.forEach(r => {
+    if (!r.wallStart) return;
+    const { y, m, d } = nlDate(r.wallStart);
+    const dow = new Date(y, m - 1, d, 12).getDay();
+    const idx = (dow + 6) % 7;
+    dayData[idx] = (dayData[idx] || 0) + r.dist / 1000;
+  });
+  drawDaysChart($('#chartDays'), dayData);
+  show('stats');
+}
+
+function buildPeriodSeg() {
+  const seg = $('#periodSeg'); seg.innerHTML = '';
+  ['week', 'maand'].forEach(k => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (statsPeriod === k ? ' on' : '');
+    b.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+    b.addEventListener('click', () => {
+      statsPeriod = k; buildPeriodSeg();
+      const h = loadHistory();
+      renderPeriodChart(h.runs.slice().sort((a, b) => (a.wallStart || 0) - (b.wallStart || 0)));
+    });
+    seg.appendChild(b);
+  });
+}
+
+function renderPeriodChart(runs) {
+  const isWeek = statsPeriod === 'week';
+  const periods = isWeek ? last12Weeks() : last12Months();
+  const keyFn = isWeek ? weekKey : monthKey;
+  const labelFn = isWeek ? weekLabel : monthLabel;
+  const data = {};
+  runs.forEach(r => {
+    if (!r.wallStart) return;
+    const k = keyFn(r.wallStart);
+    if (!data[k]) data[k] = { km: 0, runs: 0, time: 0 };
+    data[k].km += r.dist / 1000;
+    data[k].runs++;
+    data[k].time += r.time;
+  });
+  drawBarChart($('#chartBar'), periods, data, labelFn);
+  const info = $('#chartBarInfo');
+  info.textContent = isWeek ? 'Kilometers per week (maandag t/m zondag), laatste 12 weken.' : 'Kilometers per maand, laatste 12 maanden.';
 }
 
 /* ---------- instellingenscherm ---------- */
@@ -1178,7 +1716,15 @@ function init() {
   buildModeSeg();
   $('#coachName').value = S.name || '';
   $('#coachName').addEventListener('input', e => { S.name = e.target.value.slice(0, 20); saveSettings(); });
-  $('#placeIn').addEventListener('input', e => { S.place = e.target.value; saveSettings(); lastSummaryText = summaryText(); });
+  $('#placeIn').addEventListener('input', e => {
+    if (viewingHistory) {
+      viewingHistory.place = e.target.value;
+      const h = loadHistory();
+      const r = h.runs.find(x => x.id === viewingHistory.id);
+      if (r) { r.place = e.target.value; saveHistorySafe(h); }
+    } else { S.place = e.target.value; saveSettings(); }
+    lastSummaryText = summaryText();
+  });
   $('#mapOn').checked = !!S.map;
   $('#mapOn').addEventListener('change', e => { S.map = e.target.checked; saveSettings(); });
   $('#mixOn').checked = S.mix !== false;
@@ -1205,7 +1751,7 @@ function init() {
   $('#btnStop').addEventListener('click', () => $('#confirm').classList.add('on'));
   $('#btnStopNo').addEventListener('click', () => $('#confirm').classList.remove('on'));
   $('#btnStopYes').addEventListener('click', () => finishRun(false));
-  $('#btnAgain').addEventListener('click', () => { RUN.state = 'setup'; show('setup'); });
+  $('#btnAgain').addEventListener('click', () => { viewingHistory = null; RUN.state = 'setup'; show('setup'); });
   $('#btnCopy').addEventListener('click', () => {
     const b = $('#btnCopy');
     const ok = () => { b.textContent = 'Gekopieerd'; setTimeout(() => { b.textContent = 'Kopieer samenvatting'; }, 1800); };
@@ -1245,10 +1791,27 @@ function init() {
   /* geen offline-cache meer: oude registraties en caches opruimen, zodat updates direct zichtbaar zijn */
   if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
   if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+
+  /* geschiedenis en statistieken */
+  $('#btnHistory').addEventListener('click', showHistory);
+  $('#btnStats').addEventListener('click', showStats);
+  $('#btnHistHome').addEventListener('click', () => { show('setup'); });
+  $('#btnHistToStats').addEventListener('click', showStats);
+  $('#btnStatsHome').addEventListener('click', () => { show('setup'); });
+  $('#btnStatsToHist').addEventListener('click', showHistory);
+  $('#btnHistBack2').addEventListener('click', () => { viewingHistory = null; showHistory(); });
+  $('#btnHistDel').addEventListener('click', () => { if (viewingHistory) deleteHistoryRun(viewingHistory.id); });
+  $('#btnBackupMake').addEventListener('click', makeBackup);
+  $('#btnBackupRestore').addEventListener('click', () => { $('#backupFile').value = ''; $('#backupFile').click(); });
+  $('#backupFile').addEventListener('change', e => { if (e.target.files.length) restoreBackup(e.target.files[0]); });
+  $('#btnBackupCopy').addEventListener('click', () => {
+    const ta = $('#backupText');
+    try { navigator.clipboard.writeText(ta.value).then(() => { $('#btnBackupCopy').textContent = 'Gekopieerd'; setTimeout(() => { $('#btnBackupCopy').textContent = 'Kopieer'; }, 1800); }); } catch (e) { ta.select(); }
+  });
 }
 
 /* testhaken (alleen om te controleren, geen functie voor de gebruiker) */
-window.__lc = { RUN, S, onFix, fmtPace, smoothSpeed };
+window.__lc = { RUN, S, onFix, fmtPace, smoothSpeed, loadHistory, saveHistorySafe, showHistory, showStats, openHistoryDetail, KEY_HIST };
 init();
 })();
 </script>
